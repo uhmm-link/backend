@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uhmm.link — Scores</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 24px; color: #334155; font-weight: 600; }
+    .row { padding: 12px 0; display: flex; align-items: flex-start; gap: 10px; }
+    .decision { font-weight: 600; }
+    .approved { color: #16a34a; }
+    .rejected { color: #dc2626; }
+    .content { color: #64748b; font-size: 0.9rem; margin-top: 4px; }
+    .empty { color: #475569; text-align: center; margin-top: 24px; }
+    .score-row { padding: 12px 0; display: flex; align-items: flex-start; gap: 10px; }
+    .score-decision { font-weight: 600; margin-right: 8px; }
+    .count-approved { color: #16a34a; }
+    .count-rejected { color: #dc2626; }
+    .score-content { color: #64748b; font-size: 0.9rem; }
+    .accordion-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; background: #fff; border: 1px solid #cbd5e1;
+      border-radius: 6px; cursor: pointer; margin-bottom: 4px;
+    }
+    .accordion-header:hover { background: #f8fafc; }
+    .accordion-body { padding: 12px; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 6px 6px; background: #fff; margin-bottom: 12px; }
+    .accordion-body.hidden { display: none; }
+    .evaluation-summary { margin: 12px 0; font-size: 0.9rem; }
+    .export-btns { display: flex; gap: 8px; margin-bottom: 16px; }
+    .export-btns button {
+      padding: 6px 12px; font-size: 0.85rem; background: #e2e8f0; color: #475569;
+      border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;
+    }
+    .export-btns button:hover { background: #cbd5e1; color: #334155; }
+    .header-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+    }
+    .header-row h1 { margin: 0; }
+    .header-actions-row { display: flex; align-items: center; gap: 8px; }
+    .account-menu { position: relative; }
+    .account-btn {
+      padding: 6px 12px; font-size: 0.85rem; background: #e2e8f0; color: #475569;
+      border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;
+    }
+    .account-btn:hover { background: #cbd5e1; color: #334155; }
+    .account-btn.logged-in { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .account-dropdown {
+      position: absolute; top: 100%; right: 0; margin-top: 4px; min-width: 220px;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 8px 0; z-index: 100;
+    }
+    .account-dropdown.hidden { display: none; }
+    .account-dropdown-item {
+      display: block; width: 100%; padding: 8px 16px; border: none; background: none;
+      text-align: left; font-size: 0.9rem; color: #334155; cursor: pointer;
+    }
+    .account-dropdown-item:hover { background: #f1f5f9; }
+    .account-dropdown-item.divider { margin-top: 4px; padding-top: 8px; }
+    .account-status { padding: 8px 16px; font-size: 0.8rem; color: #64748b; }
+    .header-breadcrumbs { margin-bottom: 16px; }
+    .breadcrumb-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin: 0; }
+    .scores-view-toolbar {
+      display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+      margin-bottom: 12px; padding-bottom: 8px;
+    }
+    .scores-view-toolbar button {
+      width: 38px; height: 38px; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1rem; border: none; background: transparent;
+      color: #64748b; cursor: pointer; border-radius: 4px;
+    }
+    .scores-view-toolbar button:hover { background: #e2e8f0; color: #334155; }
+    .scores-view-toolbar button.active { background: #334155; color: #fff; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .card-item {
+      padding: 12px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .row img,
+    .score-row img,
+    .card-item img {
+      width: 64px;
+      height: 48px;
+      min-width: 64px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .card-item img {
+      width: 100%;
+      height: 140px;
+      min-width: 0;
+      margin-bottom: 4px;
+    }
+    .card-item.decision-approved { border-color: #86efac; background: #f0fdf4; }
+    .card-item.decision-rejected { border-color: #fca5a5; background: #fef2f2; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const API = window.location.origin + '/api';
+    const BASE = window.location.origin;
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const segments = parts[0] === 'scores' ? parts.slice(1) : parts;
+
+    const AUTH_KEY = 'uhmm_logged_in';
+    const USER_ID_KEY = 'uhmm_user_id';
+    const TEST_USERS = { user1: 'u1', user2: 'u2' };
+    const USER_DISPLAY_NAMES = { u1: 'User 1', u2: 'User 2' };
+    const SCORES_VIEW_KEY = 'uhmm-scores-view-mode';
+
+    function isLoggedIn() {
+      const v = localStorage.getItem(AUTH_KEY);
+      return v === '1' || v === null;
+    }
+    function setLoggedIn(value) {
+      localStorage.setItem(AUTH_KEY, value ? '1' : '0');
+      if (value && !localStorage.getItem(USER_ID_KEY)) localStorage.setItem(USER_ID_KEY, TEST_USERS.user1);
+    }
+    function loginAsUser(userKey) {
+      localStorage.setItem(AUTH_KEY, '1');
+      localStorage.setItem(USER_ID_KEY, TEST_USERS[userKey]);
+    }
+    function getCreatorId() {
+      if (!isLoggedIn()) return null;
+      let id = localStorage.getItem(USER_ID_KEY);
+      if (!id) { id = 'u' + Math.random().toString(36).slice(2, 11); localStorage.setItem(USER_ID_KEY, id); }
+      return id;
+    }
+
+    let scoresViewMode = localStorage.getItem(SCORES_VIEW_KEY) || 'list';
+    if (scoresViewMode !== 'grid' && scoresViewMode !== 'list') scoresViewMode = 'list';
+
+    function el(tag, attrs, text) {
+      const e = document.createElement(tag);
+      if (attrs) Object.assign(e, attrs);
+      if (text != null) e.appendChild(document.createTextNode(text));
+      return e;
+    }
+
+    function formatDecidedAt(decidedAt) {
+      if (!decidedAt) return '';
+      try {
+        const d = new Date(decidedAt);
+        return isNaN(d.getTime()) ? '' : d.toLocaleString();
+      } catch { return ''; }
+    }
+
+    function makeHeader(breadcrumbItems, title, onViewChange) {
+      const header = el('div');
+      const headerRow = el('div', { className: 'header-row' });
+      const logoLink = el('a', { href: BASE + '/', style: 'text-decoration:none;color:inherit;font-weight:600;font-size:1.25rem' }, 'uhmm.link');
+      headerRow.appendChild(logoLink);
+      const actionsRow = el('div', { className: 'header-actions-row' });
+      const accountMenu = el('div', { className: 'account-menu' });
+      const accountBtn = el('button', { className: 'account-btn' });
+      const currentUserId = getCreatorId();
+      const isUser1 = currentUserId === TEST_USERS.user1;
+      accountBtn.textContent = isLoggedIn() ? (isUser1 ? 'User 1 \u25BC' : 'User 2 \u25BC') : 'Account \u25BC';
+      if (isLoggedIn()) accountBtn.classList.add('logged-in');
+      const accountDropdown = el('div', { className: 'account-dropdown hidden' });
+      const statusEl = el('div', { className: 'account-status' });
+      statusEl.textContent = isLoggedIn()
+        ? 'Logged in as ' + (isUser1 ? 'User 1' : 'User 2') + ' \u2014 Scores in your account'
+        : 'Logged out \u2014 Scores viewable via URL';
+      accountDropdown.appendChild(statusEl);
+      const loginUser1Btn = el('button', { className: 'account-dropdown-item' }, 'Login as User 1');
+      loginUser1Btn.onclick = () => { loginAsUser('user1'); accountDropdown.classList.add('hidden'); load(); };
+      const loginUser2Btn = el('button', { className: 'account-dropdown-item' }, 'Login as User 2');
+      loginUser2Btn.onclick = () => { loginAsUser('user2'); accountDropdown.classList.add('hidden'); load(); };
+      const logoutBtn = el('button', { className: 'account-dropdown-item divider' }, 'Log out');
+      logoutBtn.onclick = () => { setLoggedIn(false); accountDropdown.classList.add('hidden'); load(); };
+      accountDropdown.appendChild(loginUser1Btn);
+      accountDropdown.appendChild(loginUser2Btn);
+      accountDropdown.appendChild(logoutBtn);
+      accountBtn.onclick = (e) => {
+        e.stopPropagation();
+        const wasHidden = accountDropdown.classList.contains('hidden');
+        accountDropdown.classList.toggle('hidden');
+        if (wasHidden) {
+          const close = () => { accountDropdown.classList.add('hidden'); document.removeEventListener('click', close); };
+          setTimeout(() => document.addEventListener('click', close), 0);
+        }
+      };
+      accountDropdown.onclick = (e) => e.stopPropagation();
+      accountMenu.appendChild(accountBtn);
+      accountMenu.appendChild(accountDropdown);
+      actionsRow.appendChild(accountMenu);
+      headerRow.appendChild(actionsRow);
+      header.appendChild(headerRow);
+
+      const titleWrap = el('div', { className: 'header-breadcrumbs' });
+      titleWrap.appendChild(el('h1', { className: 'breadcrumb-title' }, title || 'Scores'));
+      header.appendChild(titleWrap);
+
+      if (onViewChange) {
+        const toolbar = el('div', { className: 'scores-view-toolbar' });
+        const listBtn = el('button', { className: 'btn-view' + (scoresViewMode === 'list' ? ' active' : ''), title: 'List view' }, '\u2630');
+        const gridBtn = el('button', { className: 'btn-view' + (scoresViewMode === 'grid' ? ' active' : ''), title: 'Grid view' }, '\u229E');
+        const updateActive = () => {
+          listBtn.classList.toggle('active', scoresViewMode === 'list');
+          gridBtn.classList.toggle('active', scoresViewMode === 'grid');
+        };
+        listBtn.onclick = () => { scoresViewMode = 'list'; localStorage.setItem(SCORES_VIEW_KEY, 'list'); updateActive(); onViewChange(); };
+        gridBtn.onclick = () => { scoresViewMode = 'grid'; localStorage.setItem(SCORES_VIEW_KEY, 'grid'); updateActive(); onViewChange(); };
+        toolbar.appendChild(gridBtn);
+        toolbar.appendChild(listBtn);
+        header.appendChild(toolbar);
+      }
+      return header;
+    }
+
+    function countDecisions(scores) {
+      let approved = 0, rejected = 0;
+      (scores || []).forEach((s) => {
+        if (s.decision === 'approved') approved++;
+        else if (s.decision === 'rejected') rejected++;
+      });
+      return { approved, rejected };
+    }
+
+    function sortByApprovalRejected(a, b) {
+      const ar = (a.rejected || 0) / Math.max(1, (a.approved || 0) + (a.rejected || 0));
+      const br = (b.rejected || 0) / Math.max(1, (b.approved || 0) + (b.rejected || 0));
+      if (ar !== br) return ar - br;
+      return (b.approved || 0) + (b.rejected || 0) - (a.approved || 0) - (a.rejected || 0);
+    }
+
+    async function fetchJSON(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    }
+
+    function showExportBlob(text, filename, mime) {
+      const b64 = btoa(unescape(encodeURIComponent(text)));
+      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Export</title><style>body{font-family:system-ui,sans-serif;margin:1rem;white-space:pre-wrap;word-break:break-all;}button{margin-bottom:1rem;padding:0.5rem 1rem;cursor:pointer;}</style></head><body><button onclick="d()">Download</button><pre id="c"></pre><script>(function(){var t=decodeURIComponent(escape(atob("' + b64 + '")));document.getElementById("c").textContent=t;window.d=function(){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"' + mime + '"}));a.download="' + filename + '";a.click();};})();<' + '/script></body></html>';
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (!w || w.closed) window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
+    function renderPerReviewer(stack, scores, project) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      const projectId = stack.projectId || '';
+      const breadcrumbItems = [
+        { label: 'Scores', href: BASE + '/' },
+        projectId ? { label: project?.label || 'Project', href: BASE + '/scores/' + projectId } : null,
+        { label: stack.label, href: projectId ? BASE + '/scores/' + projectId + '/' + stack.id : null },
+        { label: 'Scores' }
+      ].filter(Boolean);
+      const lastIdx = breadcrumbItems.length - 1;
+      if (breadcrumbItems[lastIdx]?.href) breadcrumbItems[lastIdx] = { label: breadcrumbItems[lastIdx].label };
+
+      const contentWrap = el('div', { className: 'scores-content' });
+      function renderContent() {
+        contentWrap.innerHTML = '';
+        if (scores.length > 0) {
+          const exportBtns = el('div', { className: 'export-btns' });
+          const jsonBtn = el('button', null, 'JSON');
+          const csvBtn = el('button', null, 'CSV');
+          const dt = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+          jsonBtn.onclick = () => {
+            const text = JSON.stringify(scores.map((s) => ({ id: s.cardId, content: s.content || '', decision: s.decision, decidedAt: s.decidedAt })), null, 2);
+            showExportBlob(text, 'scores_' + dt + '.json', 'application/json');
+          };
+          csvBtn.onclick = () => {
+            const text = 'cardId,content,decision,decidedAt\n' + scores.map((s) => '"' + (s.cardId || '').replace(/"/g, '""') + '","' + (s.content || '').replace(/"/g, '""') + '","' + (s.decision || '') + '","' + (s.decidedAt || '') + '"').join('\n');
+            showExportBlob(text, 'scores_' + dt + '.csv', 'text/csv');
+          };
+          exportBtns.appendChild(jsonBtn);
+          exportBtns.appendChild(csvBtn);
+          contentWrap.appendChild(exportBtns);
+          if (scoresViewMode === 'grid') {
+            const grid = el('div', { className: 'card-grid' });
+            scores.forEach((s) => {
+              const item = el('div', { className: 'card-item decision-' + (s.decision || '') });
+              if (s.imageUrl) {
+                item.appendChild(el('img', { src: s.imageUrl, alt: s.content || '' }));
+              }
+              item.appendChild(el('div', { className: 'decision ' + s.decision }, s.decision));
+              item.appendChild(el('div', { className: 'content' }, (s.content || '').slice(0, 80) + (s.content?.length > 80 ? '\u2026' : '')));
+              if (s.decidedAt) {
+                item.appendChild(el('div', { className: 'score-decided-at', style: 'font-size:0.7rem;color:#64748b;margin-top:4px' }, formatDecidedAt(s.decidedAt)));
+              }
+              grid.appendChild(item);
+            });
+            contentWrap.appendChild(grid);
+          } else {
+            scores.forEach((s) => {
+              const row = el('div', { className: 'row' });
+              if (s.imageUrl) {
+                row.appendChild(el('img', { src: s.imageUrl, alt: s.content || '' }));
+              }
+              row.appendChild(el('div', { className: 'decision ' + s.decision }, s.decision));
+              const contentEl = el('div', { className: 'content' });
+              contentEl.appendChild(document.createTextNode((s.content || '').slice(0, 120) + (s.content?.length > 120 ? '\u2026' : '')));
+              if (s.decidedAt) {
+                contentEl.appendChild(el('div', { className: 'score-decided-at', style: 'font-size:0.8rem;color:#64748b;margin-top:4px' }, formatDecidedAt(s.decidedAt)));
+              }
+              row.appendChild(contentEl);
+              contentWrap.appendChild(row);
+            });
+          }
+        } else {
+          contentWrap.appendChild(el('p', { className: 'empty' }, 'No scores yet.'));
+        }
+      }
+      app.appendChild(makeHeader(breadcrumbItems, stack.label + ' \u2014 Scores', scores.length > 0 ? renderContent : null));
+      app.appendChild(contentWrap);
+      renderContent();
+    }
+
+    function renderStackAggregated(project, stack, reviewers, directScores) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      const breadcrumbItems = [
+        { label: 'Scores', href: BASE + '/' },
+        { label: project.label, href: BASE + '/scores/' + project.id },
+        { label: stack.label + ' \u2014 All reviewers' }
+      ];
+
+      const allScores = [...(reviewers || []).flatMap((r) => r.scores || []), ...(directScores || [])];
+      const counts = { approved: 0, rejected: 0 };
+      allScores.forEach((s) => {
+        if (s.decision === 'approved') counts.approved++;
+        else if (s.decision === 'rejected') counts.rejected++;
+      });
+
+      const cardAgg = new Map();
+      allScores.forEach((s) => {
+        if (!s.cardId) return;
+        let agg = cardAgg.get(s.cardId);
+        if (!agg) agg = { cardId: s.cardId, content: s.content || '', imageUrl: s.imageUrl, approved: 0, rejected: 0 };
+        if (s.decision === 'approved') agg.approved++;
+        else if (s.decision === 'rejected') agg.rejected++;
+        if (!agg.imageUrl && s.imageUrl) agg.imageUrl = s.imageUrl;
+        cardAgg.set(s.cardId, agg);
+      });
+      const cardsByApproval = [...cardAgg.values()].sort(sortByApprovalRejected);
+
+      const contentWrap = el('div', { className: 'scores-content' });
+      function renderContent() {
+        contentWrap.innerHTML = '';
+        const summary = el('div', { className: 'evaluation-summary' });
+        summary.innerHTML = '<strong>Totals:</strong> ' + (counts.approved + counts.rejected) + ' cards — ' +
+          '<span class="count-approved">' + counts.approved + ' approved</span> · ' +
+          '<span class="count-rejected">' + counts.rejected + ' rejected</span>';
+        contentWrap.appendChild(summary);
+
+        const exportBtns = el('div', { className: 'export-btns' });
+        const jsonBtn = el('button', null, 'JSON');
+        const csvBtn = el('button', null, 'CSV');
+        const dt = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+        const jsonData = cardsByApproval.map((agg) => ({ cardId: agg.cardId, content: agg.content, approved: agg.approved, rejected: agg.rejected }));
+        jsonBtn.onclick = () => showExportBlob(JSON.stringify(jsonData, null, 2), 'scores_aggregated_' + dt + '.json', 'application/json');
+        csvBtn.onclick = () => {
+          const text = 'cardId,content,approved,rejected\n' + jsonData.map((r) => '"' + (r.cardId || '') + '","' + (r.content || '').replace(/"/g, '""') + '",' + r.approved + ',' + r.rejected).join('\n');
+          showExportBlob(text, 'scores_aggregated_' + dt + '.csv', 'text/csv');
+        };
+        exportBtns.appendChild(jsonBtn);
+        exportBtns.appendChild(csvBtn);
+        contentWrap.appendChild(exportBtns);
+
+        if (scoresViewMode === 'grid') {
+          const grid = el('div', { className: 'card-grid' });
+          cardsByApproval.forEach((agg) => {
+            const item = el('div', { className: 'card-item decision-' + (agg.approved >= agg.rejected ? 'approved' : 'rejected') });
+            if (agg.imageUrl) {
+              item.appendChild(el('img', { src: agg.imageUrl, alt: agg.content || '' }));
+            }
+            const badge = el('span', { className: 'score-decision' });
+            badge.innerHTML = '<span class="count-approved">' + agg.approved + '</span> - <span class="count-rejected">' + agg.rejected + '</span>';
+            item.appendChild(badge);
+            item.appendChild(el('span', { className: 'score-content' }, (agg.content || '').slice(0, 80) + (agg.content?.length > 80 ? '\u2026' : '')));
+            grid.appendChild(item);
+          });
+          contentWrap.appendChild(grid);
+        } else {
+          cardsByApproval.forEach((agg) => {
+            const row = el('div', { className: 'score-row' });
+            if (agg.imageUrl) {
+              row.appendChild(el('img', { src: agg.imageUrl, alt: agg.content || '' }));
+            }
+            const badge = el('span', { className: 'score-decision' });
+            badge.innerHTML = '<span class="count-approved">' + agg.approved + '</span> - <span class="count-rejected">' + agg.rejected + '</span>';
+            row.appendChild(badge);
+            row.appendChild(el('span', { className: 'score-content' }, (agg.content || '').slice(0, 200) + (agg.content?.length > 200 ? '\u2026' : '')));
+            contentWrap.appendChild(row);
+          });
+        }
+
+        const evaluators = [...(reviewers || []).map((r) => ({ ...r, isDirect: false })), ...(directScores?.length ? [{ reviewerName: 'Direct', sessionId: 'direct', scores: directScores, isDirect: true }] : [])];
+        if (evaluators.length > 0) {
+          const revTitle = el('div', { className: 'evaluation-summary', style: 'margin-top:16px' }, 'Reviewers:');
+          contentWrap.appendChild(revTitle);
+          evaluators.forEach((r) => {
+            const link = r.isDirect ? null : BASE + '/scores/' + project.id + '/' + stack.id + '/' + r.sessionId;
+            const a = link ? el('a', { href: link, style: 'display:block;padding:8px 0;color:#2563eb;text-decoration:none' }, r.reviewerName + ' \u2192') : el('span', { style: 'display:block;padding:8px 0;color:#64748b' }, r.reviewerName);
+            contentWrap.appendChild(a);
+          });
+        }
+      }
+      app.appendChild(makeHeader(breadcrumbItems, stack.label + ' \u2014 All reviewers', renderContent));
+      app.appendChild(contentWrap);
+      renderContent();
+    }
+
+    function renderProjectAggregated(project, stacks) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      const breadcrumbItems = [
+        { label: 'Scores', href: BASE + '/' },
+        { label: project.label + ' \u2014 All stacks' }
+      ];
+
+      let totalApproved = 0, totalRejected = 0;
+      const allScores = [];
+      stacks.forEach((s) => {
+        (s.reviewers || []).forEach((r) => {
+          (r.scores || []).forEach((sc) => {
+            allScores.push({ ...sc, stackId: s.id, stackLabel: s.label || '' });
+          });
+        });
+        (s.directScores || []).forEach((sc) => {
+          allScores.push({ ...sc, stackId: s.id, stackLabel: s.label || '' });
+        });
+      });
+      allScores.forEach((s) => {
+        if (s.decision === 'approved') totalApproved++;
+        else if (s.decision === 'rejected') totalRejected++;
+      });
+
+      const cardAgg = new Map();
+      allScores.forEach((s) => {
+        if (!s.cardId) return;
+        const key = s.stackId + ':' + s.cardId;
+        let agg = cardAgg.get(key);
+        if (!agg) agg = { cardId: s.cardId, content: s.content || '', imageUrl: s.imageUrl, stackLabel: s.stackLabel || '', approved: 0, rejected: 0 };
+        if (s.decision === 'approved') agg.approved++;
+        else if (s.decision === 'rejected') agg.rejected++;
+        if (!agg.imageUrl && s.imageUrl) agg.imageUrl = s.imageUrl;
+        cardAgg.set(key, agg);
+      });
+      const cardsByApproval = [...cardAgg.values()].sort(sortByApprovalRejected);
+      cardsByApproval.forEach((agg) => {
+        agg.content = (agg.stackLabel ? '[' + agg.stackLabel + '] ' : '') + (agg.content || '');
+      });
+
+      const contentWrap = el('div', { className: 'scores-content' });
+      function renderContent() {
+        contentWrap.innerHTML = '';
+        const summary = el('div', { className: 'evaluation-summary' });
+        summary.innerHTML = '<strong>Totals:</strong> ' + (totalApproved + totalRejected) + ' cards — ' +
+          '<span class="count-approved">' + totalApproved + ' approved</span> · ' +
+          '<span class="count-rejected">' + totalRejected + ' rejected</span>';
+        contentWrap.appendChild(summary);
+
+        const exportBtns = el('div', { className: 'export-btns' });
+        const jsonBtn = el('button', null, 'JSON');
+        const csvBtn = el('button', null, 'CSV');
+        const dt = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+        const jsonData = cardsByApproval.map((agg) => ({ cardId: agg.cardId, content: agg.content, stackLabel: agg.stackLabel, approved: agg.approved, rejected: agg.rejected }));
+        jsonBtn.onclick = () => showExportBlob(JSON.stringify(jsonData, null, 2), 'scores_project_' + dt + '.json', 'application/json');
+        csvBtn.onclick = () => {
+          const text = 'cardId,content,stackLabel,approved,rejected\n' + jsonData.map((r) => '"' + (r.cardId || '') + '","' + (r.content || '').replace(/"/g, '""') + '","' + (r.stackLabel || '').replace(/"/g, '""') + '",' + r.approved + ',' + r.rejected).join('\n');
+          showExportBlob(text, 'scores_project_' + dt + '.csv', 'text/csv');
+        };
+        exportBtns.appendChild(jsonBtn);
+        exportBtns.appendChild(csvBtn);
+        contentWrap.appendChild(exportBtns);
+
+        if (scoresViewMode === 'grid') {
+          const grid = el('div', { className: 'card-grid' });
+          cardsByApproval.forEach((agg) => {
+            const item = el('div', { className: 'card-item decision-' + (agg.approved >= agg.rejected ? 'approved' : 'rejected') });
+            if (agg.imageUrl) {
+              item.appendChild(el('img', { src: agg.imageUrl, alt: agg.content || '' }));
+            }
+            const badge = el('span', { className: 'score-decision' });
+            badge.innerHTML = '<span class="count-approved">' + agg.approved + '</span> - <span class="count-rejected">' + agg.rejected + '</span>';
+            item.appendChild(badge);
+            item.appendChild(el('span', { className: 'score-content' }, (agg.content || '').slice(0, 80) + (agg.content?.length > 80 ? '\u2026' : '')));
+            grid.appendChild(item);
+          });
+          contentWrap.appendChild(grid);
+        } else {
+          cardsByApproval.forEach((agg) => {
+            const row = el('div', { className: 'score-row' });
+            if (agg.imageUrl) {
+              row.appendChild(el('img', { src: agg.imageUrl, alt: agg.content || '' }));
+            }
+            const badge = el('span', { className: 'score-decision' });
+            badge.innerHTML = '<span class="count-approved">' + agg.approved + '</span> - <span class="count-rejected">' + agg.rejected + '</span>';
+            row.appendChild(badge);
+            row.appendChild(el('span', { className: 'score-content' }, (agg.content || '').slice(0, 200) + (agg.content?.length > 200 ? '\u2026' : '')));
+            contentWrap.appendChild(row);
+          });
+        }
+
+        if (stacks.length > 0) {
+          const stacksTitle = el('div', { className: 'evaluation-summary', style: 'margin-top:16px' }, 'Stacks:');
+          contentWrap.appendChild(stacksTitle);
+          stacks.forEach((s) => {
+            const a = el('a', { href: BASE + '/scores/' + project.id + '/' + s.id, style: 'display:block;padding:8px 0;color:#2563eb;text-decoration:none' }, s.label + ' \u2192');
+            contentWrap.appendChild(a);
+          });
+        }
+      }
+      app.appendChild(makeHeader(breadcrumbItems, project.label + ' \u2014 All stacks', renderContent));
+      app.appendChild(contentWrap);
+      renderContent();
+    }
+
+    async function load() {
+      const app = document.getElementById('app');
+
+      if (segments.length === 3) {
+        const [projectId, stackId, sessionId] = segments;
+        try {
+          const { stack, scores } = await fetchJSON(API + '/scores/' + stackId + '/' + sessionId);
+          if (stack.projectId !== projectId) {
+            app.innerHTML = '<p class="empty">Stack does not belong to this project.</p>';
+            return;
+          }
+          let project = null;
+          try {
+            const creatorId = getCreatorId();
+            const url = API + '/projects?projectId=' + encodeURIComponent(projectId) + (creatorId ? '&creatorId=' + encodeURIComponent(creatorId) : '');
+            const projData = await fetch(url).then((r) => r.json());
+            project = Array.isArray(projData) ? projData[0] : projData?.projects?.[0];
+          } catch (_) {}
+          renderPerReviewer(stack, scores, project);
+        } catch {
+          app.innerHTML = '<p class="empty">Could not load scores.</p>';
+        }
+        return;
+      }
+
+      if (segments.length === 2) {
+        const [s1, s2] = segments;
+        try {
+          const { stack, scores } = await fetchJSON(API + '/scores/' + s1 + '/' + s2);
+          if (stack.projectId) {
+            const canonical = BASE + '/scores/' + stack.projectId + '/' + stack.id + '/' + s2;
+            if (window.location.pathname + window.location.search !== new URL(canonical).pathname) {
+              window.history.replaceState(null, '', canonical);
+            }
+          }
+          renderPerReviewer(stack, scores);
+          return;
+        } catch (_) {}
+        try {
+          const { project, stacks } = await fetchJSON(API + '/scores/project/' + s1);
+          const stack = stacks.find((st) => st.id === s2);
+          if (!stack) {
+            app.innerHTML = '<p class="empty">Stack not found in this project.</p>';
+            return;
+          }
+          renderStackAggregated(project, stack, stack.reviewers || [], stack.directScores || []);
+        } catch {
+          app.innerHTML = '<p class="empty">Could not load. Invalid URL.</p>';
+        }
+        return;
+      }
+
+      if (segments.length === 1) {
+        const [projectId] = segments;
+        try {
+          const { project, stacks } = await fetchJSON(API + '/scores/project/' + projectId);
+          const hasScores = stacks.some((s) => (s.reviewers?.length || 0) > 0 || (s.directScores?.length || 0) > 0);
+          if (!hasScores) {
+            app.innerHTML = '<p class="empty">No scores yet for this project.</p>';
+            return;
+          }
+          renderProjectAggregated(project, stacks);
+        } catch {
+          app.innerHTML = '<p class="empty">Project not found.</p>';
+        }
+        return;
+      }
+
+      app.innerHTML = '<p class="empty">Invalid URL. Use /scores/{projectId} or /scores/{projectId}/{stackId} or /scores/{projectId}/{stackId}/{sessionId}</p>';
+    }
+
+    load();
+  </script>
+</body>
+</html>

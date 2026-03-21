@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uhmm.link — Review</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 24px;
+    }
+    #header { flex-shrink: 0; margin-bottom: 24px; }
+    #app { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .header-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0; flex-wrap: wrap; gap: 12px;
+    }
+    .header-row h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+    .header-actions-row { display: flex; align-items: center; gap: 8px; }
+    .account-menu { position: relative; }
+    .account-btn {
+      padding: 6px 12px; font-size: 0.85rem; background: #e2e8f0; color: #475569;
+      border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;
+    }
+    .account-btn:hover { background: #cbd5e1; color: #334155; }
+    .account-btn.logged-in { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .account-dropdown {
+      position: absolute; top: 100%; right: 0; margin-top: 4px; min-width: 220px;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 8px 0; z-index: 100;
+    }
+    .account-dropdown.hidden { display: none; }
+    .account-dropdown-item {
+      display: block; width: 100%; padding: 8px 16px; border: none; background: none;
+      text-align: left; font-size: 0.9rem; color: #334155; cursor: pointer;
+    }
+    .account-dropdown-item:hover { background: #f1f5f9; }
+    .account-dropdown-item.divider { margin-top: 4px; padding-top: 8px; }
+    .account-status { padding: 8px 16px; font-size: 0.8rem; color: #64748b; }
+    .signin-modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1001;
+    }
+    .signin-modal {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      width: min(420px, 92vw);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .signin-modal h3 { margin: 0 0 8px; font-size: 1.1rem; color: #334155; }
+    .signin-modal p { margin: 0 0 12px; color: #64748b; font-size: 0.9rem; }
+    .signin-mode-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 4px 0 12px;
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f8fafc;
+    }
+    .signin-mode-tab {
+      border: none;
+      border-right: 1px solid #e2e8f0;
+      background: transparent;
+      color: #475569;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      flex: 1;
+    }
+    .signin-mode-tab:last-child { border-right: none; }
+    .signin-mode-tab:hover { background: #eef2ff; }
+    .signin-mode-tab.active { color: #1d4ed8; background: #dbeafe; font-weight: 600; }
+    .signin-mode-sep { display: none; }
+    .signin-provider-list { display: grid; gap: 8px; }
+    .signin-provider-btn {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      color: #334155;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .signin-provider-btn:hover { border-color: #2563eb; background: #f8fafc; }
+    .signin-provider-btn:disabled {
+      color: #94a3b8;
+      background: #f8fafc;
+      border-color: #e2e8f0;
+      cursor: not-allowed;
+    }
+    .signin-dev-links {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .signin-dev-btn {
+      border: 1px dashed #cbd5e1;
+      background: #fff;
+      color: #475569;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .signin-dev-btn:hover { border-color: #94a3b8; background: #f8fafc; }
+    .signin-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
+    .signin-close-btn {
+      padding: 6px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+      color: #475569;
+      cursor: pointer;
+    }
+    .signin-close-btn:hover { background: #f8fafc; }
+    .header-breadcrumbs .breadcrumb-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin: 0; }
+    .name-form { width: 100%; max-width: 320px; }
+    .name-form label { display: block; margin-bottom: 8px; color: #475569; font-size: 0.9rem; font-weight: 500; }
+    .name-form input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      color: #1e293b;
+      font-size: 1rem;
+      margin-bottom: 16px;
+    }
+    .name-form input:focus { outline: none; border-color: #2563eb; }
+    .name-form input:disabled {
+      background: #f1f5f9;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+    .name-form button {
+      width: 100%;
+      padding: 12px 16px;
+      background: #22c55e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .name-form button:hover { background: #16a34a; }
+    .card-stack {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      min-height: 280px;
+    }
+    .card {
+      position: absolute;
+      width: 100%;
+      min-height: 240px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      transition: transform 0.1s ease-out;
+    }
+    .card:active { cursor: grabbing; }
+    .card.dragging { pointer-events: none; }
+    .card img {
+      max-width: 100%;
+      max-height: 160px;
+      object-fit: contain;
+      border-radius: 8px;
+      display: block;
+      margin-bottom: 12px;
+    }
+    .card .content {
+      font-size: 1rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .card .meta {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 8px;
+    }
+    .card .meta.meta-link { margin-top: 4px; }
+    .card .meta.meta-link a { color: #2563eb; text-decoration: none; }
+    .card .meta.meta-link a:hover { text-decoration: underline; }
+    .empty {
+      text-align: center;
+      color: #475569;
+      font-size: 1.1rem;
+    }
+    .hint {
+      margin-top: 24px;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+    .done-section {
+      margin-top: 24px;
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+    }
+    .done-section button {
+      padding: 14px 28px;
+      background: #22c55e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .done-section button:hover { background: #16a34a; }
+    .done-section .scores-url {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      word-break: break-all;
+      color: #2563eb;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .done-section .scores-url a { color: #2563eb; }
+    .swipe-indicator {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 2rem;
+      font-weight: bold;
+      opacity: 0;
+      transition: opacity 0.15s;
+      pointer-events: none;
+    }
+    .swipe-indicator.approve { left: 20px; color: #16a34a; }
+    .swipe-indicator.reject { right: 20px; color: #dc2626; }
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .action-buttons button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+    }
+    .action-buttons .btn-reject { background: #dc2626; }
+    .action-buttons .btn-reject:hover { background: #b91c1c; }
+    .action-buttons .btn-approve { background: #22c55e; }
+    .action-buttons .btn-approve:hover { background: #16a34a; }
+    .scores-url .qr-mini {
+      display: inline-block;
+      margin-left: 12px;
+      vertical-align: middle;
+    }
+    .scores-url .qr-mini img { border-radius: 6px; display: block; }
+    .scores-url .qr-mini span { font-size: 0.75rem; color: #64748b; display: block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div id="header"></div>
+  <div id="app"></div>
+
+  <script>
+    const API = window.location.origin + '/api';
+    const BASE = window.location.origin;
+    const AUTH_KEY = 'uhmm_logged_in';
+    const USER_ID_KEY = 'uhmm_user_id';
+    const ANON_REVIEWER_ID_KEY = 'uhmm_anon_reviewer_id';
+    let authUser = null;
+    const TEST_USERS = { user1: 'u1', user2: 'u2', user3: 'u3' };
+    const USER_DISPLAY_NAMES = { u1: 'User 1', u2: 'User 2', u3: 'User 3' };
+
+    function isLoggedIn() {
+      if (authUser?.id) return true;
+      return localStorage.getItem(AUTH_KEY) === '1';
+    }
+    function loginAsUser(userKey) {
+      localStorage.setItem(AUTH_KEY, '1');
+      localStorage.setItem(USER_ID_KEY, TEST_USERS[userKey]);
+      location.reload();
+    }
+    async function refreshAuthUser() {
+      try {
+        const res = await fetch(API + '/auth/me', { credentials: 'include' });
+        if (!res.ok) throw new Error('auth unavailable');
+        const data = await res.json();
+        if (data?.authenticated && data?.user?.id) {
+          authUser = data.user;
+          localStorage.setItem(AUTH_KEY, '1');
+          localStorage.setItem(USER_ID_KEY, data.user.id);
+          return;
+        }
+      } catch (_) {}
+      authUser = null;
+    }
+    function startGoogleLogin() {
+      const returnTo = window.location.pathname + (window.location.hash || '');
+      window.location.href = API + '/auth/google/start?returnTo=' + encodeURIComponent(returnTo);
+    }
+    function showSignInModal() {
+      const overlay = el('div', { className: 'signin-modal-overlay' });
+      const modal = el('div', { className: 'signin-modal' });
+      modal.appendChild(el('h3', null, 'Log in / Sign up'));
+      let mode = 'login';
+      const toggle = el('div', { className: 'signin-mode-toggle' });
+      const loginTab = el('button', { className: 'signin-mode-tab active', type: 'button' }, 'Log in');
+      const sep = el('span', { className: 'signin-mode-sep' }, 'or');
+      const signupTab = el('button', { className: 'signin-mode-tab', type: 'button' }, 'Sign up');
+      toggle.appendChild(loginTab);
+      toggle.appendChild(sep);
+      toggle.appendChild(signupTab);
+      modal.appendChild(toggle);
+
+      const providers = el('div', { className: 'signin-provider-list' });
+      modal.appendChild(providers);
+
+      function renderProviderButtons() {
+        const prefix = mode === 'login' ? 'Log in' : 'Sign up';
+        providers.innerHTML = '';
+        const googleBtn = el('button', { className: 'signin-provider-btn', type: 'button' }, prefix + ' with Google');
+        googleBtn.onclick = () => { startGoogleLogin(); };
+        const appleBtn = el('button', { className: 'signin-provider-btn', type: 'button', disabled: true }, prefix + ' with Apple (coming soon)');
+        const emailBtn = el('button', { className: 'signin-provider-btn', type: 'button', disabled: true }, prefix + ' with Email (coming soon)');
+        providers.appendChild(googleBtn);
+        providers.appendChild(appleBtn);
+        providers.appendChild(emailBtn);
+      }
+      function setMode(nextMode) {
+        mode = nextMode;
+        loginTab.classList.toggle('active', mode === 'login');
+        signupTab.classList.toggle('active', mode === 'signup');
+        renderProviderButtons();
+      }
+      loginTab.onclick = () => setMode('login');
+      signupTab.onclick = () => setMode('signup');
+      renderProviderButtons();
+
+      const devLinks = el('div', { className: 'signin-dev-links' });
+      ['user1', 'user2', 'user3'].forEach((key, idx) => {
+        const devBtn = el('button', { className: 'signin-dev-btn', type: 'button' }, 'Dev User ' + (idx + 1));
+        devBtn.onclick = () => {
+          loginAsUser(key);
+          overlay.remove();
+        };
+        devLinks.appendChild(devBtn);
+      });
+      modal.appendChild(devLinks);
+      const actions = el('div', { className: 'signin-actions' });
+      const closeBtn = el('button', { className: 'signin-close-btn' }, 'Close');
+      closeBtn.onclick = () => overlay.remove();
+      actions.appendChild(closeBtn);
+      modal.appendChild(actions);
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      modal.onclick = (e) => e.stopPropagation();
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    }
+    async function logoutAccount() {
+      try {
+        await fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch (_) {}
+      authUser = null;
+      localStorage.setItem(AUTH_KEY, '0');
+      location.reload();
+    }
+    function getCreatorId() {
+      if (authUser?.id) return authUser.id;
+      if (!isLoggedIn()) return null;
+      return localStorage.getItem(USER_ID_KEY) || null;
+    }
+    function getReviewerName() {
+      if (!isLoggedIn()) return null;
+      const id = getCreatorId();
+      if (!id) return null;
+      if (authUser && authUser.id === id) return authUser.name || authUser.email || id;
+      return USER_DISPLAY_NAMES[id] || id;
+    }
+    function getReviewerId() {
+      const loggedInId = getCreatorId();
+      if (loggedInId) return loggedInId;
+      let anonId = localStorage.getItem(ANON_REVIEWER_ID_KEY);
+      if (!anonId) {
+        anonId = 'guest_' + Math.random().toString(36).slice(2, 11);
+        localStorage.setItem(ANON_REVIEWER_ID_KEY, anonId);
+      }
+      return anonId;
+    }
+
+    function el(tag, attrs, text) {
+      const e = document.createElement(tag);
+      if (attrs) Object.assign(e, attrs);
+      if (text != null) e.appendChild(document.createTextNode(text));
+      return e;
+    }
+
+    function makeHeader(stackLabel) {
+      const header = el('div');
+      const headerRow = el('div', { className: 'header-row' });
+      const logoLink = el('a', { href: BASE + '/', style: 'text-decoration:none;color:inherit;font-weight:600;font-size:1.25rem' }, 'uhmm.link');
+      headerRow.appendChild(logoLink);
+      const actionsRow = el('div', { className: 'header-actions-row' });
+      const accountMenu = el('div', { className: 'account-menu' });
+      const accountBtn = el('button', { className: 'account-btn' });
+      const currentUserId = getCreatorId();
+      const displayName = currentUserId
+        ? ((authUser && authUser.id === currentUserId) ? (authUser.name || authUser.email || currentUserId) : (USER_DISPLAY_NAMES[currentUserId] || currentUserId))
+        : null;
+      accountBtn.textContent = isLoggedIn() ? (displayName || 'Account') + ' \u25BC' : 'Account';
+      if (isLoggedIn()) accountBtn.classList.add('logged-in');
+      if (!isLoggedIn()) {
+        accountBtn.onclick = () => showSignInModal();
+        accountMenu.appendChild(accountBtn);
+        actionsRow.appendChild(accountMenu);
+        headerRow.appendChild(actionsRow);
+        header.appendChild(headerRow);
+        if (stackLabel) {
+          const breadcrumbs = el('div', { className: 'header-breadcrumbs', style: 'margin-top:12px;margin-bottom:0' });
+          breadcrumbs.appendChild(el('h1', { className: 'breadcrumb-title' }, stackLabel));
+          header.appendChild(breadcrumbs);
+        }
+        return header;
+      }
+      const accountDropdown = el('div', { className: 'account-dropdown hidden' });
+      const statusEl = el('div', { className: 'account-status' });
+      statusEl.textContent = 'Logged in as ' + (displayName || currentUserId) + ' \u2014 Review as this user';
+      accountDropdown.appendChild(statusEl);
+      ['user1', 'user2', 'user3'].forEach((key) => {
+        const btn = el('button', { className: 'account-dropdown-item' }, 'Dev login as ' + (USER_DISPLAY_NAMES[TEST_USERS[key]] || key));
+        btn.onclick = () => { loginAsUser(key); accountDropdown.classList.add('hidden'); };
+        accountDropdown.appendChild(btn);
+      });
+      const logoutBtn = el('button', { className: 'account-dropdown-item divider' }, 'Log out');
+      logoutBtn.onclick = () => { logoutAccount(); accountDropdown.classList.add('hidden'); };
+      accountDropdown.appendChild(logoutBtn);
+      accountBtn.onclick = (e) => {
+        e.stopPropagation();
+        const wasHidden = accountDropdown.classList.contains('hidden');
+        accountDropdown.classList.toggle('hidden');
+        if (wasHidden) {
+          const close = () => { accountDropdown.classList.add('hidden'); document.removeEventListener('click', close); };
+          setTimeout(() => document.addEventListener('click', close), 0);
+        }
+      };
+      accountDropdown.onclick = (e) => e.stopPropagation();
+      accountMenu.appendChild(accountBtn);
+      accountMenu.appendChild(accountDropdown);
+      actionsRow.appendChild(accountMenu);
+      headerRow.appendChild(actionsRow);
+      header.appendChild(headerRow);
+      if (stackLabel) {
+        const breadcrumbs = el('div', { className: 'header-breadcrumbs', style: 'margin-top:12px;margin-bottom:0' });
+        breadcrumbs.appendChild(el('h1', { className: 'breadcrumb-title' }, stackLabel));
+        header.appendChild(breadcrumbs);
+      }
+      return header;
+    }
+
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    let projectId = null;
+    let stackId = null;
+    if (parts[0] === 'review') {
+      if (parts.length >= 3) {
+        projectId = parts[1];
+        stackId = parts[2];
+      } else if (parts.length === 2) {
+        stackId = parts[1];
+      }
+    }
+    refreshAuthUser().finally(() => {
+      if (localStorage.getItem(AUTH_KEY) === null && !authUser) localStorage.setItem(AUTH_KEY, '0');
+      document.getElementById('header').appendChild(makeHeader(null));
+      if (!stackId) {
+        document.getElementById('app').innerHTML = '<p class="empty">No stack ID in URL. Use /review/{projectId}/{stackId} or /review/{stackId}</p>';
+        return;
+      }
+      validateAndRun();
+    });
+
+    async function validateAndRun() {
+      const app = document.getElementById('app');
+      app.innerHTML = '<p class="empty">Loading…</p>';
+      try {
+        if (projectId) {
+          const projRes = await fetch(API + '/projects/' + projectId + '/stacks');
+          if (!projRes.ok) {
+            app.innerHTML = '<p class="empty">Project not found.</p>';
+            return;
+          }
+        }
+        const stackRes = await fetch(API + '/stacks/' + stackId);
+        if (!stackRes.ok) {
+          app.innerHTML = '<p class="empty">Stack not found.</p>';
+          return;
+        }
+        const stack = await stackRes.json();
+        if (projectId && stack.projectId !== projectId) {
+          app.innerHTML = '<p class="empty">Stack does not belong to this project.</p>';
+          return;
+        }
+        if (!projectId && stack.projectId) {
+          const canonical = window.location.origin + '/review/' + stack.projectId + '/' + stack.id;
+          window.history.replaceState(null, '', canonical);
+          projectId = stack.projectId;
+        }
+        const headerEl = document.getElementById('header');
+        headerEl.innerHTML = '';
+        headerEl.appendChild(makeHeader(stack.label || 'Review'));
+        run();
+      } catch (e) {
+        app.innerHTML = '<p class="empty">Could not load. Check the URL.</p>';
+      }
+    }
+
+    function run() {
+      const app = document.getElementById('app');
+      const loggedInName = getReviewerName();
+      const isLoggedIn = !!loggedInName;
+      app.innerHTML = '<div class="name-form"><label>Your name</label><input type="text" id="nameInput" placeholder="' + (isLoggedIn ? '' : 'Enter your name') + '" value="' + (loggedInName || '') + '" ' + (isLoggedIn ? 'disabled' : '') + ' autofocus><button onclick="startReview()">Start</button></div>';
+      document.getElementById('nameInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') startReview();
+      });
+    }
+
+    function startReview() {
+      const input = document.getElementById('nameInput');
+      const name = (input?.value || '').trim();
+      if (!name) return;
+      loadAndSwipe(name);
+    }
+
+    async function loadAndSwipe(reviewerName) {
+      const app = document.getElementById('app');
+      const reviewerId = getReviewerId();
+      const sessionId = 's' + Math.random().toString(36).slice(2, 11);
+      const decisions = [];
+
+      try {
+        fetch(API + '/assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stackId, reviewerId, reviewerName })
+        }).catch(() => {});
+        const cards = await fetch(API + '/stacks/' + stackId + '/all-cards').then(r => {
+          if (!r.ok) throw new Error('Stack not found');
+          return r.json();
+        });
+        if (cards.length === 0) {
+          app.innerHTML = '<p class="empty">No cards to review.</p>';
+          return;
+        }
+        app.innerHTML = '<div class="card-stack" id="stack"></div><div class="action-buttons" id="actionButtons"><button class="btn-reject" data-decision="rejected">✕ Rejected</button><button class="btn-approve" data-decision="approved">✓ Approved</button></div><p class="hint" id="hint">Swipe right = approved · left = rejected (or use buttons)</p><div class="done-section" id="doneSection"><button id="doneBtn" style="display:none">Done</button><div class="scores-url" id="scoresUrl"></div></div>';
+        renderCards(document.getElementById('stack'), cards, sessionId, reviewerId, reviewerName, decisions, document.getElementById('doneBtn'), document.getElementById('actionButtons'));
+      } catch (e) {
+        app.innerHTML = '<p class="empty">Could not load stack. Check the URL.</p>';
+      }
+    }
+
+    function renderCards(container, cards, sessionId, reviewerId, reviewerName, decisions, doneBtn, actionButtons) {
+      let currentIndex = 0;
+      let startX = 0, startY = 0;
+      let cardShownAt = 0;
+
+      function applyDecision(decision) {
+        const card = cards[currentIndex];
+        if (!card) return;
+        decisions.push({
+          cardId: card.id,
+          decision,
+          decidedAt: new Date().toISOString(),
+          swipeTimeMs: cardShownAt ? Math.max(0, Date.now() - cardShownAt) : undefined
+        });
+        currentIndex++;
+        const cardEls = container.querySelectorAll('.card');
+        const el = cardEls[cardEls.length - 1];
+        if (el) {
+          el.style.transition = 'transform 0.2s ease-out';
+          el.style.transform = 'translate(0, -100px)';
+          el.style.opacity = '0';
+          setTimeout(showCard, 200);
+        } else {
+          showCard();
+        }
+      }
+
+      function showCard() {
+        const card = cards[currentIndex];
+        if (!card) {
+          container.innerHTML = '<p class="empty">All done! Click Done to submit.</p>';
+          if (actionButtons) actionButtons.style.display = 'none';
+          doneBtn.style.display = 'block';
+          return;
+        }
+        cardShownAt = Date.now();
+        if (actionButtons) actionButtons.style.display = 'flex';
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.dataset.cardId = card.id;
+        if (card.imageUrl) {
+          const img = document.createElement('img');
+          img.src = card.imageUrl;
+          img.alt = card.content || card.meta?.ogTitle || '';
+          img.referrerPolicy = 'no-referrer';
+          img.loading = 'lazy';
+          el.appendChild(img);
+        }
+        const content = document.createElement('div');
+        content.className = 'content';
+        const displayText = (card.meta?.ogTitle || card.content || '').trim() || '';
+        if (displayText && /^https?:\/\//i.test(displayText)) {
+          const a = document.createElement('a');
+          a.href = displayText;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = displayText;
+          a.style.wordBreak = 'break-all';
+          content.appendChild(a);
+        } else {
+          content.textContent = displayText;
+        }
+        el.appendChild(content);
+        if (card.meta?.ogDescription || card.meta?.source) {
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          meta.textContent = (card.meta.ogDescription || card.meta.source || '').trim();
+          el.appendChild(meta);
+        }
+        if (card.content && /^https?:\/\//i.test(card.content) && (card.meta?.ogTitle || card.meta?.ogDescription)) {
+          const linkWrap = document.createElement('div');
+          linkWrap.className = 'meta meta-link';
+          const a = document.createElement('a');
+          a.href = card.content;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = 'View original';
+          linkWrap.appendChild(a);
+          el.appendChild(linkWrap);
+        }
+        const approve = document.createElement('div');
+        approve.className = 'swipe-indicator approve';
+        approve.textContent = '✓';
+        el.appendChild(approve);
+        const reject = document.createElement('div');
+        reject.className = 'swipe-indicator reject';
+        reject.textContent = '✗';
+        el.appendChild(reject);
+
+        el.addEventListener('pointerdown', (e) => {
+          startX = e.clientX;
+          startY = e.clientY;
+          el.classList.add('dragging');
+        });
+        el.addEventListener('pointermove', (e) => {
+          if (!el.classList.contains('dragging')) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          el.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.03}deg)`;
+          approve.style.opacity = dx > 80 ? '0.9' : '0';
+          reject.style.opacity = dx < -80 ? '0.9' : '0';
+        });
+        el.addEventListener('pointerup', (e) => {
+          el.classList.remove('dragging');
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          let decision = null;
+          if (dx > 80) decision = 'approved';
+          else if (dx < -80) decision = 'rejected';
+          if (decision) {
+            decisions.push({
+              cardId: card.id,
+              decision,
+              decidedAt: new Date().toISOString(),
+              swipeTimeMs: cardShownAt ? Math.max(0, Date.now() - cardShownAt) : undefined
+            });
+            currentIndex++;
+            el.style.transition = 'transform 0.2s ease-out';
+            el.style.transform = `translate(${dx * 2}px, ${dy}px)`;
+            el.style.opacity = '0';
+            setTimeout(showCard, 200);
+          } else {
+            el.style.transform = '';
+            approve.style.opacity = reject.style.opacity = '0';
+          }
+        });
+        el.addEventListener('pointercancel', () => {
+          el.classList.remove('dragging');
+          el.style.transform = '';
+        });
+
+        container.appendChild(el);
+      }
+
+      if (actionButtons) {
+        actionButtons.querySelectorAll('button').forEach((btn) => {
+          btn.onclick = () => applyDecision(btn.dataset.decision);
+        });
+      }
+
+      doneBtn.onclick = async () => {
+        if (decisions.length === 0) return;
+        doneBtn.disabled = true;
+        doneBtn.textContent = 'Submitting…';
+        try {
+          const res = await fetch(API + '/scores', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              stackId,
+              reviewerId,
+              reviewerName,
+              sessionId,
+              decisions,
+            }),
+          });
+          const data = await res.json();
+          if (data.scoresUrl) {
+            const qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(data.scoresUrl);
+            document.getElementById('scoresUrl').innerHTML = '<span>Share with creator: <a href="' + data.scoresUrl + '" target="_blank">' + data.scoresUrl + '</a></span>' +
+              '<span class="qr-mini"><img src="' + qrImg + '" alt="QR code" width="120" height="120"><span>Creator can scan to view</span></span>';
+          }
+        } catch (e) {
+          doneBtn.textContent = 'Retry';
+          doneBtn.disabled = false;
+        }
+      };
+
+      showCard();
+    }
+  </script>
+</body>
+</html>

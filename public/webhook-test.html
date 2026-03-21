@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Webhook test — uhmm.link</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      margin: 0;
+      padding: 24px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 24px; color: #475569; font-weight: 600; }
+    .url-box {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .url-box input {
+      flex: 1;
+      border: none;
+      font: inherit;
+      font-size: 0.9rem;
+      color: #334155;
+      background: transparent;
+    }
+    .url-box input:focus { outline: none; }
+    .copy-btn {
+      padding: 6px 12px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: #1d4ed8; }
+    .copy-btn.copied { background: #16a34a; }
+    .payloads { margin-top: 24px; }
+    .payloads h2 { font-size: 1rem; color: #64748b; margin: 0 0 12px; font-weight: 600; }
+    .payload-item {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+    }
+    .payload-item .time { color: #64748b; margin-bottom: 8px; font-size: 0.8rem; }
+    .payload-item pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      color: #334155;
+    }
+    .empty { color: #94a3b8; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Webhook test</h1>
+  <p style="color:#64748b;margin:0 0 16px;font-size:0.9rem;">
+    Use this URL as your webhook in Account, Project, or Stack settings. Complete a review to see payloads below.
+  </p>
+  <div class="url-box">
+    <input type="text" id="webhook-url" readonly value="">
+    <button type="button" class="copy-btn" id="copy-btn">Copy</button>
+  </div>
+  <div class="payloads">
+    <h2>Recent payloads</h2>
+    <div id="payload-list"></div>
+  </div>
+
+  <script>
+    const API = window.location.origin + '/api';
+    const webhookUrl = API + '/webhook-test';
+    document.getElementById('webhook-url').value = webhookUrl;
+
+    const copyBtn = document.getElementById('copy-btn');
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(webhookUrl);
+      copyBtn.textContent = 'Copied';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+        copyBtn.classList.remove('copied');
+      }, 1500);
+    };
+
+    function renderPayloads(payloads) {
+      const list = document.getElementById('payload-list');
+      if (!payloads || payloads.length === 0) {
+        list.innerHTML = '<div class="payload-item empty">No payloads yet. Complete a review with this webhook URL configured.</div>';
+        return;
+      }
+      list.innerHTML = payloads.map(p => `
+        <div class="payload-item">
+          <div class="time">${p.receivedAt}</div>
+          <pre>${JSON.stringify(p.body, null, 2)}</pre>
+        </div>
+      `).join('');
+    }
+
+    async function poll() {
+      try {
+        const r = await fetch(API + '/webhook-test');
+        const payloads = await r.json();
+        renderPayloads(payloads);
+      } catch (e) {
+        document.getElementById('payload-list').innerHTML =
+          '<div class="payload-item empty">Failed to load payloads.</div>';
+      }
+    }
+
+    poll();
+    setInterval(poll, 2000);
+  </script>
+</body>
+</html>

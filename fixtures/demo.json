@@ -1,0 +1,66 @@
+{
+  "projects": [
+    {
+      "id": "p1",
+      "label": "Email drafts",
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "creatorId": "u1",
+      "order": 0
+    },
+    {
+      "id": "p2",
+      "label": "Social posts",
+      "createdAt": "2025-01-15T10:01:00.000Z",
+      "creatorId": "u1",
+      "order": 1
+    }
+  ],
+  "stacks": [
+    {
+      "id": "s1",
+      "projectId": "p1",
+      "label": "Q1 batch — 5 cards",
+      "createdAt": "2025-01-15T10:05:00.000Z",
+      "creatorId": "u1",
+      "order": 0
+    },
+    {
+      "id": "s2",
+      "projectId": "p1",
+      "label": "Drafts batch",
+      "createdAt": "2025-01-15T10:06:00.000Z",
+      "creatorId": "u1",
+      "order": 1
+    },
+    {
+      "id": "s3",
+      "projectId": "p2",
+      "label": "Social review",
+      "createdAt": "2025-01-15T10:07:00.000Z",
+      "creatorId": "u1",
+      "order": 0
+    }
+  ],
+  "cards": [
+    { "id": "c1", "stackId": "s1", "content": "Dear John, thanks for your email. I will get back to you by Friday.", "createdAt": "2025-01-15T10:10:00.000Z" },
+    { "id": "c2", "stackId": "s1", "content": "Quick post: Shipping the new feature today. Thanks to the team!", "createdAt": "2025-01-15T10:10:01.000Z" },
+    { "id": "c3", "stackId": "s1", "content": "Reminder: Team standup tomorrow 9am. Please prepare your updates.", "createdAt": "2025-01-15T10:10:02.000Z" },
+    { "id": "c4", "stackId": "s1", "content": "Hi Sarah, I've reviewed the proposal. A few thoughts below.", "createdAt": "2025-01-15T10:10:03.000Z" },
+    { "id": "c5", "stackId": "s1", "content": "Thanks for the feedback. I'll incorporate your suggestions and resend.", "createdAt": "2025-01-15T10:10:04.000Z" },
+    { "id": "c6", "stackId": "s2", "content": "Launching something new this week. Stay tuned!", "createdAt": "2025-01-15T10:11:00.000Z" },
+    { "id": "c7", "stackId": "s2", "content": "Big thanks to everyone who made the conference a success.", "createdAt": "2025-01-15T10:11:01.000Z" },
+    { "id": "c8", "stackId": "s3", "content": "5 lessons from building our first product. A thread.", "createdAt": "2025-01-15T10:12:00.000Z" }
+  ],
+  "scores": [
+    { "sessionId": "ses1", "stackId": "s1", "reviewerId": "r1", "reviewerName": "Alice", "cardId": "c1", "decision": "approved", "decidedAt": "2025-01-15T11:00:00.000Z" },
+    { "sessionId": "ses1", "stackId": "s1", "reviewerId": "r1", "reviewerName": "Alice", "cardId": "c2", "decision": "rejected", "decidedAt": "2025-01-15T11:00:05.000Z" },
+    { "sessionId": "ses1", "stackId": "s1", "reviewerId": "r1", "reviewerName": "Alice", "cardId": "c3", "decision": "approved", "decidedAt": "2025-01-15T11:00:10.000Z" },
+    { "sessionId": "ses1", "stackId": "s1", "reviewerId": "r1", "reviewerName": "Alice", "cardId": "c4", "decision": "approved", "decidedAt": "2025-01-15T11:00:15.000Z" },
+    { "sessionId": "ses1", "stackId": "s1", "reviewerId": "r1", "reviewerName": "Alice", "cardId": "c5", "decision": "rejected", "decidedAt": "2025-01-15T11:00:20.000Z" },
+    { "sessionId": "ses2", "stackId": "s1", "reviewerId": "r2", "reviewerName": "Bob", "cardId": "c1", "decision": "rejected", "decidedAt": "2025-01-15T11:30:00.000Z" },
+    { "sessionId": "ses2", "stackId": "s1", "reviewerId": "r2", "reviewerName": "Bob", "cardId": "c2", "decision": "approved", "decidedAt": "2025-01-15T11:30:05.000Z" }
+  ],
+  "userScoreLinks": [],
+  "stackAssignments": [],
+  "creatorSettings": []
+}
