@@ -212,9 +212,11 @@ Storage and visibility differ based on whether the creator and reviewer are logg
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | /stacks | Create stack (text cards + image URLs) → stackId |
-| GET | /stacks/:stackId | Get cards (text + URLs); optional password check |
+| GET | /stacks/:stackId | Get stack metadata and cards (text + URLs); optional password check |
 | POST | /scores | Submit scores (stackId, reviewerId, reviewer name, sessionId, decisions) |
 | GET | /scores/:stackId/:sessionId | Get scores for a session |
+
+See [API.md](API.md) for the full endpoint spec.
 
 ### Storage / Persistence
 

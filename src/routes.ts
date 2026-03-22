@@ -570,12 +570,13 @@ api.get("/uploads/:stackId/:filename", (req: Request, res: Response) => {
     });
 });
 
-// Get stack
+// Get stack (includes cards array for single-call convenience)
 api.get("/stacks/:id", (req: Request, res: Response) => {
     const stack = store.getStack(req.params.id);
     if (!stack)
         return res.status(404).json({ error: "Stack not found" });
-    res.json(stack);
+    const cards = store.getAllCardsByStack(req.params.id);
+    res.json({ ...stack, cards });
 });
 
 // Delete stack
