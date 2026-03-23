@@ -4,6 +4,8 @@ export interface CreatorSettings {
   creatorId: string;
   callbackUrl?: string | null;
   notificationEmail?: string | null;
+  /** Base URL for share links (review, scores). Override when localhost isn't reachable from other devices. */
+  shareBaseUrl?: string | null;
 }
 
 export interface DbState {

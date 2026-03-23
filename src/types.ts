@@ -40,7 +40,6 @@ export interface Stack {
   projectId: string;
   label: string;
   createdAt: string;
-  callbackUrl?: string;
   /** Inherited from project. When null/undefined, stack is anonymous. */
   creatorId?: string | null;
   /** Sort order within a project (lower = first). */
@@ -50,7 +49,6 @@ export interface Stack {
 export interface CreateStackBody {
   projectId: string;
   label?: string;
-  callbackUrl?: string;
 }
 
 export interface CreateCardBody {

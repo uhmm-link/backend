@@ -874,6 +874,25 @@
   <script>
     const API = window.location.origin + '/api';
     const AUTH_KEY = 'uhmm_logged_in';
+    let _cachedShareBaseUrl = null;
+    function getShareBaseUrlSync() {
+      return _cachedShareBaseUrl || window.location.origin;
+    }
+    async function fetchShareBaseUrl(onUpdate) {
+      const creatorId = getCreatorId() || '';
+      try {
+        const r = await fetch(API + '/settings/base-url?creatorId=' + encodeURIComponent(creatorId));
+        const d = await r.json();
+        if (d?.baseUrl) {
+          const url = d.baseUrl.replace(/\/$/, '');
+          if (url !== _cachedShareBaseUrl) {
+            _cachedShareBaseUrl = url;
+            onUpdate?.();
+          }
+        }
+      } catch (_) {}
+    }
+    function invalidateShareBaseUrlCache() { _cachedShareBaseUrl = null; }
     const USER_ID_KEY = 'uhmm_user_id';
     let authUser = null;
 
@@ -1357,18 +1376,22 @@
         accountDropdown.classList.add('hidden');
         const creatorId = getCreatorId();
         if (!creatorId) { showSignInModal(() => onRender()); return; }
-        let current = '';
-        let currentEmail = '';
+        let current = '', currentEmail = '', shareBaseUrl = '', suggestedBaseUrl = '';
         try {
-          const s = await fetchJSON(API + '/settings/creator?creatorId=' + encodeURIComponent(creatorId));
+          const [s, base] = await Promise.all([
+            fetchJSON(API + '/settings/creator?creatorId=' + encodeURIComponent(creatorId)),
+            fetchJSON(API + '/settings/base-url?creatorId=' + encodeURIComponent(creatorId))
+          ]);
           current = s?.callbackUrl || '';
           currentEmail = s?.notificationEmail || '';
+          shareBaseUrl = s?.shareBaseUrl || '';
+          suggestedBaseUrl = base?.suggested || '';
         } catch (_) {}
-        makeAccountSettingsModal('Account settings', { callbackUrl: current, notificationEmail: currentEmail }, async (vals) => {
+        makeAccountSettingsModal('Account settings', { callbackUrl: current, notificationEmail: currentEmail, shareBaseUrl, suggestedBaseUrl }, async (vals) => {
           await fetch(API + '/settings/creator?creatorId=' + encodeURIComponent(creatorId), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callbackUrl: vals.callbackUrl, notificationEmail: vals.notificationEmail })
+            body: JSON.stringify({ callbackUrl: vals.callbackUrl, shareBaseUrl: vals.shareBaseUrl, notificationEmail: vals.notificationEmail })
           }).then(r => r.ok ? null : Promise.reject()).catch(() => alert('Could not update settings.'));
         }, () => onRender());
       };
@@ -1407,6 +1430,7 @@
     }
 
     async function renderSeeAllPage(root, route) {
+      await fetchShareBaseUrl(render);
       const tabPath = '/projects';
       root.appendChild(makeAppHeaderForSeeAll(route, () => render()));
       const listContainer = el('div', { className: 'projects-section' });
@@ -1699,8 +1723,8 @@
       const revBody = el('div', { className: 'accordion-body hidden' });
       const revSection = el('div', { className: 'reviewer-section' });
       const scoresUrl = !r.isDirect ? (projectId
-        ? window.location.origin + '/scores/' + projectId + '/' + stackId + '/' + r.sessionId
-        : window.location.origin + '/scores/' + stackId + '/' + r.sessionId) : null;
+        ? getShareBaseUrlSync() + '/scores/' + projectId + '/' + stackId + '/' + r.sessionId
+        : getShareBaseUrlSync() + '/scores/' + stackId + '/' + r.sessionId) : null;
       const shareBtn = makeShareDropdown({ scores: r.scores || [], label: reviewerLabel, scoresUrl });
       if (shareBtn) {
         const linkRow = el('div', { className: 'scores-link-row' });
@@ -1796,19 +1820,24 @@
         accountDropdown.classList.add('hidden');
         const creatorId = getCreatorId();
         if (!creatorId) { showSignInModal(() => render()); return; }
-        let current = '';
-        let currentEmail = '';
+        let current = '', currentEmail = '', shareBaseUrl = '', suggestedBaseUrl = '';
         try {
-          const s = await fetchJSON(API + '/settings/creator?creatorId=' + encodeURIComponent(creatorId));
+          const [s, base] = await Promise.all([
+            fetchJSON(API + '/settings/creator?creatorId=' + encodeURIComponent(creatorId)),
+            fetchJSON(API + '/settings/base-url?creatorId=' + encodeURIComponent(creatorId))
+          ]);
           current = s?.callbackUrl || '';
           currentEmail = s?.notificationEmail || '';
+          shareBaseUrl = s?.shareBaseUrl || '';
+          suggestedBaseUrl = base?.suggested || '';
         } catch (_) {}
-        makeAccountSettingsModal('Account settings', { callbackUrl: current, notificationEmail: currentEmail }, async (vals) => {
+        makeAccountSettingsModal('Account settings', { callbackUrl: current, notificationEmail: currentEmail, shareBaseUrl, suggestedBaseUrl }, async (vals) => {
           await fetch(API + '/settings/creator?creatorId=' + encodeURIComponent(creatorId), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callbackUrl: vals.callbackUrl, notificationEmail: vals.notificationEmail })
+            body: JSON.stringify({ callbackUrl: vals.callbackUrl, shareBaseUrl: vals.shareBaseUrl, notificationEmail: vals.notificationEmail })
           }).then(r => r.ok ? null : Promise.reject()).catch(() => alert('Could not update settings.'));
+          invalidateShareBaseUrlCache();
         }, () => render());
       };
       const logoutBtn = el('button', { className: 'account-dropdown-item divider' }, 'Log out');
@@ -1866,6 +1895,7 @@
 
       const creatorId = getCreatorId();
       const reviewerName = getReviewerDisplayName();
+      fetchShareBaseUrl(render);
       // Fetch all projects (no creatorId filter) for local use; API returns all when creatorId omitted
       let projectsUrl = API + '/projects';
       if (searchQuery) projectsUrl += '?q=' + encodeURIComponent(searchQuery);
@@ -1874,6 +1904,7 @@
         .then(async (projects) => {
           const projList = Array.isArray(projects) ? projects : (projects?.projects || projects || []);
           const route = parseHash();
+          await fetchShareBaseUrl(render);
           if (route.projectId && route.stackId) {
             await renderStackDetailPage(projectsPanel, route);
           } else if (route.projectId) {
@@ -1945,6 +1976,21 @@
       updateHeaderBreadcrumbs([{ label: 'Projects', href: '/projects' }, { label: proj.label }]);
 
       const toolbar = el('div', { className: 'project-detail-toolbar' });
+      if (!isOtherProject) {
+        const projGear = el('span', { className: 'gear-icon', title: 'Project settings — Webhook URL' }, '⚙');
+        projGear.onclick = async (e) => {
+          e.stopPropagation();
+          const current = proj.callbackUrl || '';
+          makeWebhookSettingsModal('Project settings — Webhook URL (overrides account default)', current, async (val) => {
+            await fetch(API + '/projects/' + proj.id, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ callbackUrl: val })
+            }).then(r => r.ok ? null : Promise.reject()).catch(() => alert('Could not update project settings.'));
+          }, () => render());
+        };
+        toolbar.appendChild(projGear);
+      }
       const selectBtn = el('button', { className: 'btn-action btn-select' }, 'Select');
       selectBtn.onclick = (e) => {
         e.stopPropagation();
@@ -2197,20 +2243,6 @@
       toolbar.appendChild(selectBtn);
       toolbar.appendChild(toggleAllBtn);
       toolbar.appendChild(actionDropdown);
-      if (!isOtherProject) {
-        const stackSettingsGear = el('span', { className: 'gear-icon', title: 'Stack settings', style: 'margin-left:8px' }, '⚙');
-        stackSettingsGear.onclick = () => {
-          const current = stack.callbackUrl || '';
-          makeWebhookSettingsModal('Stack settings — Webhook URL (overrides project/account)', current, async (val) => {
-            await fetch(API + '/stacks/' + stack.id, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ callbackUrl: val })
-            }).then(r => r.ok ? null : Promise.reject()).catch(() => alert('Could not update stack settings.'));
-          }, () => render());
-        };
-        toolbar.appendChild(stackSettingsGear);
-      }
       const toolbarSearchRow = el('div', { className: 'toolbar-search-row' });
       if (!isOtherProject) toolbarSearchRow.appendChild(toolbar);
       toolbarSearchRow.appendChild(makeSearchBar(true));
@@ -2246,8 +2278,8 @@
           linkRowContainer.appendChild(el('p', { className: 'msg', style: 'color:#64748b;margin:0' }, 'Add cards to get the review link'));
         } else {
           const reviewUrl = (stack.projectId || proj.id)
-            ? window.location.origin + '/review/' + (stack.projectId || proj.id) + '/' + stack.id
-            : window.location.origin + '/review/' + stack.id;
+            ? getShareBaseUrlSync() + '/review/' + (stack.projectId || proj.id) + '/' + stack.id
+            : getShareBaseUrlSync() + '/review/' + stack.id;
           const link = el('a', { className: 'review-link', href: reviewUrl, target: '_blank', rel: 'noopener noreferrer' }, reviewUrl);
           linkRowContainer.appendChild(link);
           const copyIcon = el('span', { className: 'copy-icon', title: 'Copy link' }, '📋');
@@ -3194,9 +3226,9 @@
       header.appendChild(headerLeft);
       if (readOnly && stack.projectId) {
         const actions = el('div', { className: 'header-actions' });
-        const reviewUrl = window.location.origin + '/review/' + stack.projectId + '/' + stack.id;
+        const reviewUrl = getShareBaseUrlSync() + '/review/' + stack.projectId + '/' + stack.id;
         const scoresUrl = stack.hasScoresFromMe && stack.mySessionId
-          ? window.location.origin + '/scores/' + stack.projectId + '/' + stack.id + '/' + stack.mySessionId
+          ? getShareBaseUrlSync() + '/scores/' + stack.projectId + '/' + stack.id + '/' + stack.mySessionId
           : null;
         const btn = el('a', {
           className: 'btn-action',
@@ -3494,7 +3526,7 @@
           totalHeader.appendChild(totalChevron);
           const totalBody = el('div', { className: 'accordion-body hidden' });
           const totalSection = el('div', { className: 'reviewer-section' });
-          const totalsScoresUrl = window.location.origin + '/scores/' + projectId;
+          const totalsScoresUrl = getShareBaseUrlSync() + '/scores/' + projectId;
           const linkRow = el('div', { className: 'scores-link-row' });
           const totalsShareBtn = makeShareDropdown({ cardsByApproval, label: 'Totals', scoresUrl: totalsScoresUrl });
           if (totalsShareBtn) linkRow.appendChild(totalsShareBtn);
@@ -3598,8 +3630,8 @@
           const revBody = el('div', { className: 'accordion-body hidden' });
           const revSection = el('div', { className: 'reviewer-section' });
           const scoresUrl = (sessionId && stackId) ? (projectId
-            ? window.location.origin + '/scores/' + projectId + '/' + stackId + '/' + sessionId
-            : window.location.origin + '/scores/' + stackId + '/' + sessionId) : null;
+            ? getShareBaseUrlSync() + '/scores/' + projectId + '/' + stackId + '/' + sessionId
+            : getShareBaseUrlSync() + '/scores/' + stackId + '/' + sessionId) : null;
           const shareBtn = makeShareDropdown({ scores, label: reviewerLabel, scoresUrl });
           if (shareBtn) {
             const linkRow = el('div', { className: 'scores-link-row' });
@@ -3775,8 +3807,8 @@
           const totalBody = el('div', { className: 'accordion-body hidden' });
           const totalSection = el('div', { className: 'reviewer-section' });
           const totalsScoresUrl = stack?.projectId
-            ? window.location.origin + '/scores/' + stack.projectId + '/' + stackId
-            : window.location.origin + '/scores/' + stackId;
+            ? getShareBaseUrlSync() + '/scores/' + stack.projectId + '/' + stackId
+            : getShareBaseUrlSync() + '/scores/' + stackId;
           const linkRow = el('div', { className: 'scores-link-row' });
           const totalsShareBtn = makeShareDropdown({ cardsByApproval, label: 'Totals', scoresUrl: totalsScoresUrl });
           if (totalsShareBtn) linkRow.appendChild(totalsShareBtn);
@@ -3865,8 +3897,8 @@
           const revSection = el('div', { className: 'reviewer-section' });
           const projectId = stack?.projectId;
           const scoresUrl = projectId
-            ? window.location.origin + '/scores/' + projectId + '/' + stackId + '/' + r.sessionId
-            : window.location.origin + '/scores/' + stackId + '/' + r.sessionId;
+            ? getShareBaseUrlSync() + '/scores/' + projectId + '/' + stackId + '/' + r.sessionId
+            : getShareBaseUrlSync() + '/scores/' + stackId + '/' + r.sessionId;
           const shareBtn = makeShareDropdown({ scores: r.scores || [], label: reviewerLabel, scoresUrl });
           if (shareBtn) {
             const linkRow = el('div', { className: 'scores-link-row' });
@@ -4090,8 +4122,8 @@
           const totalBody = el('div', { className: 'accordion-body hidden' });
           const totalSection = el('div', { className: 'reviewer-section' });
           const totalsScoresUrl = stack?.projectId
-            ? window.location.origin + '/scores/' + stack.projectId + '/' + stackId
-            : window.location.origin + '/scores/' + stackId;
+            ? getShareBaseUrlSync() + '/scores/' + stack.projectId + '/' + stackId
+            : getShareBaseUrlSync() + '/scores/' + stackId;
           const linkRow = el('div', { className: 'scores-link-row' });
           const totalsShareBtn = makeShareDropdown({ cardsByApproval, label: 'Totals', scoresUrl: totalsScoresUrl });
           if (totalsShareBtn) linkRow.appendChild(totalsShareBtn);
@@ -4212,8 +4244,8 @@
           const revSection = el('div', { className: 'reviewer-section' });
           const projectId = stack?.projectId;
           const scoresUrl = projectId
-            ? window.location.origin + '/scores/' + projectId + '/' + stackId + '/' + r.sessionId
-            : window.location.origin + '/scores/' + stackId + '/' + r.sessionId;
+            ? getShareBaseUrlSync() + '/scores/' + projectId + '/' + stackId + '/' + r.sessionId
+            : getShareBaseUrlSync() + '/scores/' + stackId + '/' + r.sessionId;
           const shareBtn = makeShareDropdown({ scores: r.scores || [], label: reviewerLabel, scoresUrl });
           if (shareBtn) {
             const linkRow = el('div', { className: 'scores-link-row' });
@@ -4425,6 +4457,12 @@
       const webhookInput = el('input', { type: 'url', placeholder: 'https://...', value: currentValues?.callbackUrl || '' });
       modal.appendChild(webhookLabel);
       modal.appendChild(webhookInput);
+      const shareUrlLabel = el('label', { style: 'margin-top:12px' }, 'Server URL for share links (optional)');
+      const shareUrlHint = el('span', { style: 'display:block;font-size:0.8rem;color:#64748b;margin-top:2px' }, 'Override when localhost isn\'t reachable from other devices (e.g. iPhone). Use your machine\'s IP like http://192.168.1.70:3000');
+      const shareUrlInput = el('input', { type: 'url', placeholder: currentValues?.suggestedBaseUrl || 'http://192.168.1.70:3000', value: currentValues?.shareBaseUrl || '' });
+      modal.appendChild(shareUrlLabel);
+      modal.appendChild(shareUrlHint);
+      modal.appendChild(shareUrlInput);
       const emailLabel = el('label', { style: 'margin-top:12px' }, 'Notification email (optional)');
       const emailInput = el('input', { type: 'email', placeholder: 'name@example.com', value: currentValues?.notificationEmail || '' });
       modal.appendChild(emailLabel);
@@ -4435,9 +4473,11 @@
       cancelBtn.onclick = () => { overlay.remove(); onClose?.(); };
       saveBtn.onclick = async () => {
         const callbackUrl = webhookInput.value.trim() || null;
+        const shareBaseUrl = shareUrlInput.value.trim() || null;
         const notificationEmail = emailInput.value.trim() || null;
-        await onSave({ callbackUrl, notificationEmail });
+        await onSave({ callbackUrl, shareBaseUrl, notificationEmail });
         overlay.remove();
+        invalidateShareBaseUrlCache();
         onClose?.();
       };
       overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); onClose?.(); } };
@@ -4508,8 +4548,8 @@
       const hasCards = (stack.cardCount ?? stack.cards?.length ?? 0) > 0;
       if (hasCards) {
         const reviewUrl = stack.projectId
-          ? window.location.origin + '/review/' + stack.projectId + '/' + stack.id
-          : window.location.origin + '/review/' + stack.id;
+          ? getShareBaseUrlSync() + '/review/' + stack.projectId + '/' + stack.id
+          : getShareBaseUrlSync() + '/review/' + stack.id;
         const link = el('a', { className: 'review-link', href: reviewUrl, target: '_blank', rel: 'noopener noreferrer' }, reviewUrl);
         link.onclick = (e) => e.stopPropagation();
         stackActions.appendChild(link);
@@ -4717,24 +4757,11 @@
       headerLeft.appendChild(stackEditIcon);
       header.appendChild(headerLeft);
       const stackActions = el('div', { className: 'header-actions' });
-      const stackGear = el('span', { className: 'gear-icon', title: 'Stack settings' }, '⚙');
-      stackGear.onclick = (e) => {
-        e.stopPropagation();
-        const current = stack.callbackUrl || '';
-        makeWebhookSettingsModal('Stack settings — Webhook URL (overrides project/account)', current, async (val) => {
-          await fetch(API + '/stacks/' + stack.id, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callbackUrl: val })
-          }).then(r => r.ok ? null : Promise.reject()).catch(() => alert('Could not update stack settings.'));
-        }, () => render());
-      };
-      stackActions.appendChild(stackGear);
       const hasCards = (stack.cardCount ?? stack.cards?.length ?? 0) > 0;
       if (hasCards) {
         const reviewUrl = stack.projectId
-          ? window.location.origin + '/review/' + stack.projectId + '/' + stack.id
-          : window.location.origin + '/review/' + stack.id;
+          ? getShareBaseUrlSync() + '/review/' + stack.projectId + '/' + stack.id
+          : getShareBaseUrlSync() + '/review/' + stack.id;
         const copyIcon = el('span', { className: 'copy-icon', title: 'Copy link' }, '📋');
         copyIcon.onclick = (e) => { e.stopPropagation(); navigator.clipboard.writeText(reviewUrl); copyIcon.textContent = '✓'; setTimeout(() => { copyIcon.textContent = '📋'; }, 800); };
         stackActions.appendChild(copyIcon);
@@ -4746,28 +4773,6 @@
       const cardListContainer = el('div', { className: 'card-list' });
       const body = el('div', { className: 'accordion-body hidden' });
       const content = el('div', { className: 'stack-content' });
-      const webhookRow = el('div', { className: 'stack-webhook-row', style: 'margin-bottom:16px' });
-      webhookRow.appendChild(el('label', { style: 'display:block;font-size:0.85rem;color:#64748b;margin-bottom:4px' }, 'Webhook URL (optional)'));
-      const webhookInput = el('input', {
-        type: 'url',
-        placeholder: 'https://... (Slack, Discord, or custom endpoint)',
-        value: stack.callbackUrl || '',
-        style: 'width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.9rem'
-      });
-      let webhookDebounce = 0;
-      webhookInput.onchange = () => {
-        clearTimeout(webhookDebounce);
-        webhookDebounce = setTimeout(() => {
-          const val = webhookInput.value.trim() || null;
-          fetch(API + '/stacks/' + stack.id, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callbackUrl: val })
-          }).then(r => r.ok ? null : Promise.reject()).catch(() => alert('Could not update webhook URL.'));
-        }, 500);
-      };
-      webhookRow.appendChild(webhookInput);
-      content.appendChild(webhookRow);
       const fileInput = el('input', { type: 'file', multiple: true, style: 'display:none' });
       const fileList = el('div', { className: 'file-list' });
       let pendingFiles = [];

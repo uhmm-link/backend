@@ -103,12 +103,13 @@ export function updateProjectCallbackUrl(projectId: string, callbackUrl: string 
   return true;
 }
 
-export function getCreatorSettings(creatorId: string | null | undefined): { callbackUrl?: string | null; notificationEmail?: string | null } {
+export function getCreatorSettings(creatorId: string | null | undefined): { callbackUrl?: string | null; notificationEmail?: string | null; shareBaseUrl?: string | null } {
   if (!creatorId) return {};
   const settings = getState().creatorSettings?.find((cs) => cs.creatorId === creatorId);
   return {
     callbackUrl: settings?.callbackUrl ?? undefined,
     notificationEmail: settings?.notificationEmail ?? undefined,
+    shareBaseUrl: settings?.shareBaseUrl ?? undefined,
   };
 }
 
@@ -131,7 +132,7 @@ export function updateCreatorCallbackUrl(creatorId: string | null | undefined, c
 
 export function updateCreatorSettings(
   creatorId: string | null | undefined,
-  patch: { callbackUrl?: string | null; notificationEmail?: string | null }
+  patch: { callbackUrl?: string | null; notificationEmail?: string | null; shareBaseUrl?: string | null }
 ): boolean {
   if (!creatorId) return false;
   const s = getState();
@@ -141,6 +142,8 @@ export function updateCreatorSettings(
     patch.callbackUrl !== undefined ? (patch.callbackUrl?.trim() || null) : undefined;
   const notificationEmail =
     patch.notificationEmail !== undefined ? (patch.notificationEmail?.trim() || null) : undefined;
+  const shareBaseUrl =
+    patch.shareBaseUrl !== undefined ? (patch.shareBaseUrl?.trim() || null) : undefined;
   let creatorSettings: typeof s.creatorSettings;
   if (idx >= 0) {
     creatorSettings = [...settings];
@@ -148,6 +151,7 @@ export function updateCreatorSettings(
       ...creatorSettings[idx],
       ...(callbackUrl !== undefined ? { callbackUrl: callbackUrl ?? undefined } : {}),
       ...(notificationEmail !== undefined ? { notificationEmail: notificationEmail ?? undefined } : {}),
+      ...(shareBaseUrl !== undefined ? { shareBaseUrl: shareBaseUrl ?? undefined } : {}),
     };
   } else {
     creatorSettings = [
@@ -156,6 +160,7 @@ export function updateCreatorSettings(
         creatorId,
         ...(callbackUrl !== undefined ? { callbackUrl: callbackUrl ?? undefined } : {}),
         ...(notificationEmail !== undefined ? { notificationEmail: notificationEmail ?? undefined } : {}),
+        ...(shareBaseUrl !== undefined ? { shareBaseUrl: shareBaseUrl ?? undefined } : {}),
       },
     ];
   }
@@ -163,10 +168,8 @@ export function updateCreatorSettings(
   return true;
 }
 
-/** Resolve webhook URL: stack → project → account (most specific wins). */
+/** Resolve webhook URL: project → account (project overrides account if populated). */
 export function getResolvedCallbackUrl(stack: Stack): string | null {
-  const stackUrl = stack.callbackUrl?.trim();
-  if (stackUrl) return stackUrl;
   const proj = getProject(stack.projectId);
   const projectUrl = proj?.callbackUrl?.trim();
   if (projectUrl) return projectUrl;
@@ -187,18 +190,7 @@ export function updateStackLabel(stackId: string, label: string): string | null 
   return trimmed;
 }
 
-export function updateStackCallbackUrl(stackId: string, callbackUrl: string | null): boolean {
-  const s = getState();
-  const idx = s.stacks.findIndex((st) => st.id === stackId);
-  if (idx < 0) return false;
-  const stacks = [...s.stacks];
-  const val = callbackUrl?.trim() || null;
-  stacks[idx] = { ...stacks[idx], callbackUrl: val ?? undefined };
-  persist({ ...s, stacks });
-  return true;
-}
-
-export function createStack(projectId: string, label?: string, callbackUrl?: string): Stack {
+export function createStack(projectId: string, label?: string): Stack {
   const proj = getProject(projectId);
   if (!proj) throw new Error("Project not found");
   const stack: Stack = {
@@ -206,7 +198,6 @@ export function createStack(projectId: string, label?: string, callbackUrl?: str
     projectId,
     label: label?.trim() || nextStackLabel(projectId),
     createdAt: new Date().toISOString(),
-    callbackUrl,
     creatorId: proj.creatorId ?? null,
     order: nextStackOrder(projectId),
   };

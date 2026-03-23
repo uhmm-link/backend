@@ -1,10 +1,35 @@
 import { createHash } from "crypto";
 import { readdir, readFile } from "fs/promises";
+import os from "os";
 import path from "path";
 import { Router, Request, Response } from "express";
 import * as store from "./store";
 import { getUploadsDir } from "./uploads";
 import { registerAuthRoutes, getAuthenticatedUser } from "./auth";
+
+function getSuggestedBaseUrl(): string | null {
+    const host = process.env.PUBLIC_URL?.trim();
+    if (host) return host.replace(/\/$/, "");
+    const ifaces = os.networkInterfaces();
+    for (const name of Object.keys(ifaces)) {
+        for (const iface of ifaces[name] ?? []) {
+            if (!iface.internal && iface.family === "IPv4") {
+                const port = process.env.PORT ?? "3000";
+                return `http://${iface.address}:${port}`;
+            }
+        }
+    }
+    return null;
+}
+
+function getEffectiveBaseUrl(req: Request, creatorId?: string | null): string {
+    const settings = creatorId ? store.getCreatorSettings(creatorId) : {};
+    const fromSettings = settings.shareBaseUrl?.trim();
+    if (fromSettings) return fromSettings.replace(/\/$/, "");
+    const fromEnv = process.env.PUBLIC_URL?.trim();
+    if (fromEnv) return fromEnv.replace(/\/$/, "");
+    return `${req.protocol}://${req.get("host")}`;
+}
 
 const api = Router();
 const STACKS_DIR = path.join(__dirname, "..", "data", "stacks");
@@ -345,7 +370,19 @@ api.get("/settings/creator", (req: Request, res: Response) => {
     res.json(settings);
 });
 
-// Update creator (account) settings — query: creatorId, body: { callbackUrl?, notificationEmail? }
+// Get base URL for share links — query: creatorId. Returns effective URL and suggested (machine IP when on localhost).
+// When on localhost and shareBaseUrl not set, uses suggested (machine IP) so share links work from other devices.
+api.get("/settings/base-url", (req: Request, res: Response) => {
+    const creatorId = effectiveCreatorId(req, (req.query.creatorId as string) || undefined);
+    let baseUrl = getEffectiveBaseUrl(req, creatorId);
+    const suggested = /^https?:\/\/localhost(:\d+)?$/i.test(baseUrl) ? getSuggestedBaseUrl() : null;
+    if (suggested && /^https?:\/\/localhost(:\d+)?$/i.test(baseUrl)) {
+        baseUrl = suggested;
+    }
+    res.json({ baseUrl, suggested });
+});
+
+// Update creator (account) settings — query: creatorId, body: { callbackUrl?, notificationEmail?, shareBaseUrl? }
 api.patch("/settings/creator", (req: Request, res: Response) => {
     const creatorId = effectiveCreatorId(req, (req.query.creatorId as string) || undefined);
     if (!creatorId)
@@ -353,7 +390,8 @@ api.patch("/settings/creator", (req: Request, res: Response) => {
     const body = req.body;
     const hasCallback = body?.callbackUrl !== undefined;
     const hasNotificationEmail = body?.notificationEmail !== undefined;
-    if (!hasCallback && !hasNotificationEmail) {
+    const hasShareBaseUrl = body?.shareBaseUrl !== undefined;
+    if (!hasCallback && !hasNotificationEmail && !hasShareBaseUrl) {
         return res.status(400).json({ error: "No updates provided" });
     }
     const notificationEmail = hasNotificationEmail ? (body?.notificationEmail?.trim() || null) : undefined;
@@ -363,6 +401,7 @@ api.patch("/settings/creator", (req: Request, res: Response) => {
     const ok = store.updateCreatorSettings(creatorId, {
         ...(hasCallback ? { callbackUrl: body?.callbackUrl ?? null } : {}),
         ...(hasNotificationEmail ? { notificationEmail } : {}),
+        ...(hasShareBaseUrl ? { shareBaseUrl: body?.shareBaseUrl ?? null } : {}),
     });
     if (!ok)
         return res.status(400).json({ error: "Could not update settings" });
@@ -371,6 +410,7 @@ api.patch("/settings/creator", (req: Request, res: Response) => {
         ok: true,
         callbackUrl: settings.callbackUrl ?? null,
         notificationEmail: settings.notificationEmail ?? null,
+        shareBaseUrl: settings.shareBaseUrl ?? null,
     });
 });
 
@@ -483,7 +523,7 @@ api.post("/stacks", (req: Request, res: Response) => {
     if (!hasAccessToProject(req, body.projectId)) {
         return res.status(403).json({ error: "Forbidden" });
     }
-    const stack = store.createStack(body.projectId, body.label?.trim(), body.callbackUrl);
+    const stack = store.createStack(body.projectId, body.label?.trim());
     res.status(201).json(stack);
 });
 
@@ -511,7 +551,9 @@ api.post("/stacks/from-folder", async (req: Request, res: Response) => {
         if (!hasAccessToProject(req, projectId)) {
             return res.status(403).json({ error: "Forbidden" });
         }
-        const baseUrl = `${req.protocol}://${req.get("host")}`;
+        const proj = store.getProject(projectId);
+        const creatorId = proj?.creatorId ?? effectiveCreatorId(req, undefined);
+        const baseUrl = getEffectiveBaseUrl(req, creatorId);
         const stack = store.createStackWithId(projectId, folderId, body?.label || folderId);
         if (!stack)
             return res.status(400).json({ error: "Project not found" });
@@ -589,7 +631,7 @@ api.delete("/stacks/:id", (req: Request, res: Response) => {
     res.status(204).send();
 });
 
-// Update stack label and/or callbackUrl
+// Update stack label
 api.patch("/stacks/:id", (req: Request, res: Response) => {
     if (!hasAccessToStack(req, req.params.id))
         return res.status(403).json({ error: "Forbidden" });
@@ -606,12 +648,6 @@ api.patch("/stacks/:id", (req: Request, res: Response) => {
         if (!updated)
             return res.status(404).json({ error: "Stack not found" });
         updates.label = updated;
-    }
-    if (body?.callbackUrl !== undefined) {
-        const ok = store.updateStackCallbackUrl(req.params.id, body.callbackUrl);
-        if (!ok)
-            return res.status(404).json({ error: "Stack not found" });
-        updates.callbackUrl = body.callbackUrl?.trim() || null;
     }
     if (Object.keys(updates).length === 0)
         return res.status(400).json({ error: "No updates provided" });
@@ -712,7 +748,9 @@ api.get("/stacks/:id/scores-by-reviewer", (req: Request, res: Response) => {
         return res.status(404).json({ error: "Stack not found" });
     const cards = store.getAllCardsByStack(stackId);
     const cardMap = new Map(cards.map((c) => [c.id, c]));
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const proj = stack.projectId ? store.getProject(stack.projectId) : null;
+    const creatorId = proj?.creatorId ?? stack.creatorId;
+    const baseUrl = getEffectiveBaseUrl(req, creatorId);
     const sessions = store.getSessionsByStack(stackId);
     const reviewers = sessions.map((sess) => {
         const rawScores = store.getScoresBySession(stackId, sess.sessionId);
@@ -868,7 +906,9 @@ api.post("/scores", (req: Request, res: Response) => {
         return res.status(404).json({ error: "Stack not found" });
     const stack = store.getStack(stackId);
     const projectId = stack?.projectId ?? "";
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const proj = projectId ? store.getProject(projectId) : null;
+    const creatorId = proj?.creatorId ?? stack?.creatorId;
+    const baseUrl = getEffectiveBaseUrl(req, creatorId);
     const scoresUrl = projectId
         ? `${baseUrl}/scores/${projectId}/${stackId}/${sessionId}`
         : `${baseUrl}/scores/${stackId}/${sessionId}`;
@@ -1119,7 +1159,8 @@ api.get("/scores/project/:projectId", (req: Request, res: Response) => {
         ...s,
         scoreCount: store.getScoreCount(s.id),
     }));
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const creatorId = project?.creatorId ?? null;
+    const baseUrl = getEffectiveBaseUrl(req, creatorId);
     const stacksWithScores = stacks.map((stack) => {
         const cards = store.getAllCardsByStack(stack.id);
         const cardMap = new Map(cards.map((c) => [c.id, c]));
@@ -1155,7 +1196,9 @@ api.get("/scores/:stackId/:sessionId", (req: Request, res: Response) => {
         return res.status(404).json({ error: "Stack not found" });
     const cards = store.getAllCardsByStack(stackId);
     const cardMap = new Map(cards.map((c) => [c.id, c]));
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const proj = stack.projectId ? store.getProject(stack.projectId) : null;
+    const creatorId = proj?.creatorId ?? stack.creatorId;
+    const baseUrl = getEffectiveBaseUrl(req, creatorId);
     const scores = rawScores.map((s) => ({
         ...s,
         content: cardMap.get(s.cardId)?.content ?? "",
