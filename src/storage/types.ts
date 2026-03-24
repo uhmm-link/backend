@@ -1,5 +1,15 @@
 import type { Card, Project, Score, Stack, StackAssignment, UserScoreLink } from "../types";
 
+export interface StoredUser {
+  id: string;
+  email: string;
+  passwordHash: string;
+  passwordSalt: string;
+  name?: string;
+  userType?: "human" | "agent";
+  createdAt: string;
+}
+
 export interface CreatorSettings {
   creatorId: string;
   callbackUrl?: string | null;
@@ -13,6 +23,7 @@ export interface DbState {
   stacks: Stack[];
   cards: Card[];
   scores: Score[];
+  users: StoredUser[];
   userScoreLinks: UserScoreLink[];
   stackAssignments: StackAssignment[];
   creatorSettings: CreatorSettings[];

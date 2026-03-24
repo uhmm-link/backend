@@ -182,6 +182,17 @@
       border-color: #e2e8f0;
       cursor: not-allowed;
     }
+    .auth-email-form { display: grid; gap: 8px; }
+    .auth-email-form label { display: block; font-size: 0.85rem; color: #64748b; }
+    .auth-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+    }
+    .auth-email-actions { display: flex; gap: 8px; margin-top: 4px; }
     .auth-dev-links {
       margin-top: 12px;
       padding-top: 12px;
@@ -972,10 +983,71 @@
         const googleBtn = el('button', { className: 'auth-provider-btn', type: 'button' }, prefix + ' with Google');
         googleBtn.onclick = () => { startGoogleLogin(); };
         const appleBtn = el('button', { className: 'auth-provider-btn', type: 'button', disabled: true }, prefix + ' with Apple (coming soon)');
-        const emailBtn = el('button', { className: 'auth-provider-btn', type: 'button', disabled: true }, prefix + ' with Email (coming soon)');
+        const emailBtn = el('button', { className: 'auth-provider-btn', type: 'button' }, prefix + ' with Email');
+        emailBtn.onclick = () => showEmailForm();
         providers.appendChild(googleBtn);
         providers.appendChild(appleBtn);
         providers.appendChild(emailBtn);
+      }
+      async function showEmailForm() {
+        providers.innerHTML = '';
+        const form = el('div', { className: 'auth-email-form' });
+        const emailInput = el('input', { type: 'email', placeholder: 'Email', className: 'auth-input' });
+        const passwordInput = el('input', { type: 'password', placeholder: 'Password', className: 'auth-input' });
+        const nameInput = el('input', { type: 'text', placeholder: 'Name (optional)', className: 'auth-input' });
+        const userTypeSelect = el('select', { className: 'auth-input' });
+        userTypeSelect.appendChild(el('option', { value: '' }, 'Human'));
+        userTypeSelect.appendChild(el('option', { value: 'agent' }, 'Agent'));
+        const submitBtn = el('button', { className: 'auth-provider-btn', type: 'button' }, mode === 'login' ? 'Log in' : 'Sign up');
+        const backBtn = el('button', { className: 'auth-provider-btn', type: 'button', style: 'margin-left:8px' }, 'Back');
+        form.appendChild(el('label', null, 'Email'));
+        form.appendChild(emailInput);
+        form.appendChild(el('label', null, 'Password'));
+        form.appendChild(passwordInput);
+        if (mode === 'signup') {
+          form.appendChild(el('label', null, 'Name (optional)'));
+          form.appendChild(nameInput);
+          form.appendChild(el('label', null, 'I am a'));
+          form.appendChild(userTypeSelect);
+        }
+        form.appendChild(el('div', { className: 'auth-email-actions' }, submitBtn, backBtn));
+        submitBtn.onclick = async () => {
+          const email = emailInput.value.trim();
+          const password = passwordInput.value;
+          if (!email || !password) { alert('Email and password required'); return; }
+          if (mode === 'signup' && password.length < 8) { alert('Password must be at least 8 characters'); return; }
+          submitBtn.disabled = true;
+          try {
+            const res = await fetch(API + (mode === 'login' ? '/auth/login' : '/auth/register'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                email,
+                password,
+                name: mode === 'signup' ? nameInput.value.trim() || undefined : undefined,
+                userType: mode === 'signup' && userTypeSelect.value ? userTypeSelect.value : undefined
+              })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+              authUser = data.user ? { id: data.user.id, name: data.user.name || data.user.email, email: data.user.email } : null;
+              setLoggedIn(true);
+              if (data.user?.id) localStorage.setItem(USER_ID_KEY, data.user.id);
+              overlay.remove();
+              onClose && onClose();
+            } else {
+              alert(data.error || 'Failed');
+            }
+          } catch (e) {
+            alert('Request failed');
+          } finally {
+            submitBtn.disabled = false;
+          }
+        };
+        backBtn.onclick = () => renderProviderButtons();
+        providers.appendChild(form);
+        emailInput.focus();
       }
       function setMode(nextMode) {
         mode = nextMode;

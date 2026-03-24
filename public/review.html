@@ -354,10 +354,69 @@
         const googleBtn = el('button', { className: 'signin-provider-btn', type: 'button' }, prefix + ' with Google');
         googleBtn.onclick = () => { startGoogleLogin(); };
         const appleBtn = el('button', { className: 'signin-provider-btn', type: 'button', disabled: true }, prefix + ' with Apple (coming soon)');
-        const emailBtn = el('button', { className: 'signin-provider-btn', type: 'button', disabled: true }, prefix + ' with Email (coming soon)');
+        const emailBtn = el('button', { className: 'signin-provider-btn', type: 'button' }, prefix + ' with Email');
+        emailBtn.onclick = () => showEmailForm();
         providers.appendChild(googleBtn);
         providers.appendChild(appleBtn);
         providers.appendChild(emailBtn);
+      }
+      async function showEmailForm() {
+        providers.innerHTML = '';
+        const form = el('div', { className: 'signin-email-form', style: 'display:grid;gap:8px' });
+        const emailInput = el('input', { type: 'email', placeholder: 'Email', style: 'padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px' });
+        const passwordInput = el('input', { type: 'password', placeholder: 'Password', style: 'padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px' });
+        const nameInput = el('input', { type: 'text', placeholder: 'Name (optional)', style: 'padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px' });
+        const userTypeSelect = el('select', { style: 'padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px' });
+        userTypeSelect.appendChild(el('option', { value: '' }, 'Human'));
+        userTypeSelect.appendChild(el('option', { value: 'agent' }, 'Agent'));
+        const submitBtn = el('button', { className: 'signin-provider-btn', type: 'button' }, mode === 'login' ? 'Log in' : 'Sign up');
+        const backBtn = el('button', { className: 'signin-provider-btn', type: 'button', style: 'margin-left:8px' }, 'Back');
+        form.appendChild(emailInput);
+        form.appendChild(passwordInput);
+        if (mode === 'signup') {
+          form.appendChild(nameInput);
+          form.appendChild(userTypeSelect);
+        }
+        const actionsDiv = el('div', { style: 'display:flex;gap:8px' });
+        actionsDiv.appendChild(submitBtn);
+        actionsDiv.appendChild(backBtn);
+        form.appendChild(actionsDiv);
+        submitBtn.onclick = async () => {
+          const email = emailInput.value.trim();
+          const password = passwordInput.value;
+          if (!email || !password) { alert('Email and password required'); return; }
+          if (mode === 'signup' && password.length < 8) { alert('Password must be at least 8 characters'); return; }
+          submitBtn.disabled = true;
+          try {
+            const res = await fetch(API + (mode === 'login' ? '/auth/login' : '/auth/register'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                email,
+                password,
+                name: mode === 'signup' ? nameInput.value.trim() || undefined : undefined,
+                userType: mode === 'signup' && userTypeSelect.value ? userTypeSelect.value : undefined
+              })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+              localStorage.setItem(AUTH_KEY, '1');
+              if (data.user?.id) localStorage.setItem(USER_ID_KEY, data.user.id);
+              overlay.remove();
+              location.reload();
+            } else {
+              alert(data.error || 'Failed');
+            }
+          } catch (e) {
+            alert('Request failed');
+          } finally {
+            submitBtn.disabled = false;
+          }
+        };
+        backBtn.onclick = () => renderProviderButtons();
+        providers.appendChild(form);
+        emailInput.focus();
       }
       function setMode(nextMode) {
         mode = nextMode;

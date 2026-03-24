@@ -84,13 +84,17 @@ let state: DbState = {
   stacks: [],
   cards: [],
   scores: [],
+  users: [],
   userScoreLinks: [],
   stackAssignments: [],
   creatorSettings: [],
 };
 
 function runMigrations(s: DbState): DbState {
-  let { projects, stacks, cards, scores, userScoreLinks, stackAssignments, creatorSettings } = s;
+  let { projects, stacks, cards, scores, users, userScoreLinks, stackAssignments, creatorSettings } = s;
+
+  // Migration: add users array if missing (legacy)
+  if (!Array.isArray(users)) users = [];
 
   // Migration: add creatorId to projects/stacks that don't have it (legacy = anonymous)
   const needsCreatorIdMigration =
@@ -150,7 +154,7 @@ function runMigrations(s: DbState): DbState {
     stacks = stacks.map((st) => ({ ...st, order: (st as Stack & { order?: number }).order ?? orderMap.get(st.id) ?? 0 }));
   }
 
-  return { projects, stacks, cards, scores, userScoreLinks, stackAssignments, creatorSettings };
+  return { projects, stacks, cards, scores, users, userScoreLinks, stackAssignments, creatorSettings };
 }
 
 let initPromise: Promise<void> | null = null;

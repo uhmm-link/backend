@@ -1,5 +1,6 @@
-import { randomBytes } from "crypto";
+import { randomBytes, pbkdf2Sync, timingSafeEqual } from "crypto";
 import type { Request, Response, Router } from "express";
+import * as store from "./store";
 
 type GoogleUserInfo = {
   sub: string;
@@ -10,7 +11,7 @@ type GoogleUserInfo = {
 
 type AuthUser = {
   id: string;
-  provider: "google";
+  provider: "google" | "password" | "agent";
   providerUserId: string;
   email: string | null;
   name: string;
@@ -106,8 +107,38 @@ function getGoogleConfig(req: Request): {
   return { clientId, clientSecret, redirectUri };
 }
 
+const PASSWORD_ITERATIONS = 100000;
+const PASSWORD_KEYLEN = 64;
+const PASSWORD_SALT_LEN = 16;
+
+function hashPassword(password: string, salt?: string): { hash: string; salt: string } {
+  const saltBytes = salt ? Buffer.from(salt, "hex") : randomBytes(PASSWORD_SALT_LEN);
+  const saltHex = saltBytes.toString("hex");
+  const hash = pbkdf2Sync(password, saltBytes, PASSWORD_ITERATIONS, PASSWORD_KEYLEN, "sha256");
+  return { hash: hash.toString("hex"), salt: saltHex };
+}
+
+function verifyPassword(password: string, storedHash: string, salt: string): boolean {
+  const { hash } = hashPassword(password, salt);
+  if (hash.length !== storedHash.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(storedHash, "hex"));
+  } catch {
+    return false;
+  }
+}
+
+function getSessionIdFromRequest(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === "string" && authHeader.toLowerCase().startsWith("bearer ")) {
+    const token = authHeader.slice(7).trim();
+    if (token) return token;
+  }
+  return parseCookies(req)[SESSION_COOKIE] || null;
+}
+
 function getSessionFromRequest(req: Request): SessionRecord | null {
-  const sessionId = parseCookies(req)[SESSION_COOKIE];
+  const sessionId = getSessionIdFromRequest(req);
   if (!sessionId) return null;
   const session = sessions.get(sessionId);
   if (!session) return null;
@@ -149,11 +180,89 @@ async function fetchGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo>
   return (await res.json()) as GoogleUserInfo;
 }
 
+function createSessionForUser(user: AuthUser): string {
+  const sessionId = randomToken(24);
+  sessions.set(sessionId, { user, expiresAt: Date.now() + SESSION_TTL_MS });
+  return sessionId;
+}
+
 export function registerAuthRoutes(api: Router): void {
   api.get("/auth/me", (req: Request, res: Response) => {
     const session = getSessionFromRequest(req);
     if (!session) return res.json({ authenticated: false });
     return res.json({ authenticated: true, user: session.user });
+  });
+
+  api.post("/auth/register", (req: Request, res: Response) => {
+    const body = req.body;
+    const email = typeof body?.email === "string" ? body.email.trim() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
+    const name = typeof body?.name === "string" ? body.name.trim() : undefined;
+    const userType = body?.userType === "agent" ? "agent" : body?.userType === "human" ? "human" : undefined;
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Valid email is required" });
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const existing = store.getUserByEmail(email);
+    if (existing) {
+      return res.status(409).json({ error: "Email already registered" });
+    }
+
+    const { hash, salt } = hashPassword(password);
+    const user = store.createUser({ email: email.toLowerCase(), passwordHash: hash, passwordSalt: salt, name, userType });
+
+    const authUser: AuthUser = {
+      id: user.id,
+      provider: userType === "agent" ? "agent" : "password",
+      providerUserId: user.id,
+      email: user.email,
+      name: user.name || user.email,
+      picture: null,
+    };
+    const sessionId = createSessionForUser(authUser);
+    setCookie(req, res, SESSION_COOKIE, sessionId, { maxAgeSec: Math.floor(SESSION_TTL_MS / 1000), httpOnly: true });
+
+    return res.status(201).json({
+      ok: true,
+      user: { id: authUser.id, email: authUser.email, name: authUser.name, userType: user.userType },
+      sessionToken: sessionId,
+    });
+  });
+
+  api.post("/auth/login", (req: Request, res: Response) => {
+    const body = req.body;
+    const email = typeof body?.email === "string" ? body.email.trim() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
+
+    const user = store.getUserByEmail(email);
+    if (!user || !verifyPassword(password, user.passwordHash, user.passwordSalt)) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const authUser: AuthUser = {
+      id: user.id,
+      provider: user.userType === "agent" ? "agent" : "password",
+      providerUserId: user.id,
+      email: user.email,
+      name: user.name || user.email,
+      picture: null,
+    };
+    const sessionId = createSessionForUser(authUser);
+    setCookie(req, res, SESSION_COOKIE, sessionId, { maxAgeSec: Math.floor(SESSION_TTL_MS / 1000), httpOnly: true });
+
+    return res.json({
+      ok: true,
+      user: { id: authUser.id, email: authUser.email, name: authUser.name, userType: user.userType },
+      sessionToken: sessionId,
+    });
   });
 
   api.post("/auth/logout", (req: Request, res: Response) => {
@@ -232,14 +341,7 @@ export function registerAuthRoutes(api: Router): void {
   });
 }
 
-export function getAuthenticatedUser(req: Request): {
-  id: string;
-  provider: "google";
-  providerUserId: string;
-  email: string | null;
-  name: string;
-  picture: string | null;
-} | null {
+export function getAuthenticatedUser(req: Request): AuthUser | null {
   const session = getSessionFromRequest(req);
   return session?.user ?? null;
 }

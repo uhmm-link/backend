@@ -25,7 +25,8 @@ function loadRaw(): DbState {
       const creatorSettings = Array.isArray((data as { creatorSettings?: DbState["creatorSettings"] }).creatorSettings)
         ? (data as DbState).creatorSettings
         : [];
-      return { projects, stacks, cards, scores, userScoreLinks, stackAssignments, creatorSettings };
+      const users = Array.isArray((data as { users?: DbState["users"] }).users) ? (data as DbState).users : [];
+      return { projects, stacks, cards, scores, users, userScoreLinks, stackAssignments, creatorSettings };
     }
   } catch (_) {
     // Corrupt or invalid file — start fresh
@@ -35,6 +36,7 @@ function loadRaw(): DbState {
     stacks: [],
     cards: [],
     scores: [],
+    users: [],
     userScoreLinks: [],
     stackAssignments: [],
     creatorSettings: [],

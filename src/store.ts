@@ -1,6 +1,7 @@
 import { getState, persist } from "./db";
 import { persistInlineImage } from "./uploads";
 import type { Card, Project, Score, Stack, StackAssignment, UserScoreLink } from "./types";
+import type { StoredUser } from "./storage/types";
 
 function id(): string {
   return Math.random().toString(36).slice(2, 11);
@@ -24,6 +25,38 @@ function nextStackOrder(projectId: string): number {
   const stacks = getState().stacks.filter((s) => s.projectId === projectId);
   const maxOrder = stacks.reduce((m, s) => Math.max(m, s.order ?? -1), -1);
   return maxOrder + 1;
+}
+
+export function createUser(data: {
+  email: string;
+  passwordHash: string;
+  passwordSalt: string;
+  name?: string;
+  userType?: "human" | "agent";
+}): StoredUser {
+  const s = getState();
+  const users = s.users ?? [];
+  const userId = `user_${id()}`;
+  const user: StoredUser = {
+    id: userId,
+    email: data.email.trim().toLowerCase(),
+    passwordHash: data.passwordHash,
+    passwordSalt: data.passwordSalt,
+    name: data.name?.trim(),
+    userType: data.userType,
+    createdAt: new Date().toISOString(),
+  };
+  persist({ ...s, users: [...users, user] });
+  return user;
+}
+
+export function getUserByEmail(email: string): StoredUser | undefined {
+  const norm = email?.trim().toLowerCase();
+  return (getState().users ?? []).find((u) => u.email === norm);
+}
+
+export function getUserById(id: string): StoredUser | undefined {
+  return (getState().users ?? []).find((u) => u.id === id);
 }
 
 export function createProject(label?: string, creatorId?: string | null): Project {

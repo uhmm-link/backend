@@ -478,17 +478,20 @@ api.get("/projects/:id/csv", (req: Request, res: Response) => {
 });
 
 // Push a deck: POST { projectId?, label?, cards: ["content1", ...] or [{ content, imageUrl?, meta? }] }
-// If no projectId, creates Project #1 and Stack #1
+// One-shot: creates project+stack+cards, returns reviewUrl. Auth optional (cookie or Authorization: Bearer).
 api.post("/deck", (req: Request, res: Response) => {
     const body = req.body;
     const cards = body?.cards;
     if (!Array.isArray(cards) || cards.length === 0) {
         return res.status(400).json({ error: "cards must be a non-empty array" });
     }
+    const creatorId = effectiveCreatorId(req, body?.creatorId);
     let projectId = body?.projectId?.trim();
-    if (!projectId) {
-        const projects = store.listProjects();
-        const proj = projects[0] ?? store.createProject();
+    if (projectId) {
+        if (!hasAccessToProject(req, projectId))
+            return res.status(403).json({ error: "Forbidden" });
+    } else {
+        const proj = store.createProject(undefined, creatorId ?? null);
         projectId = proj.id;
     }
     const stack = store.createStack(projectId, body?.label?.trim());
@@ -503,7 +506,10 @@ api.post("/deck", (req: Request, res: Response) => {
         if (card)
             created.push({ id: card.id, content: card.content });
     }
-    res.status(201).json({ stack, cards: created });
+    const proj = store.getProject(projectId);
+    const baseUrl = getEffectiveBaseUrl(req, proj?.creatorId ?? creatorId);
+    const reviewUrl = `${baseUrl}/review/${projectId}/${stack.id}`;
+    res.status(201).json({ stack, cards: created, reviewUrl });
 });
 
 // List stacks (flat, for backward compat)
@@ -1248,6 +1254,7 @@ api.post("/admin/reset-demo", async (req: Request, res: Response) => {
             stacks: data.stacks ?? [],
             cards: data.cards ?? [],
             scores: data.scores ?? [],
+            users: Array.isArray(data.users) ? data.users : [],
             userScoreLinks: data.userScoreLinks ?? [],
             stackAssignments: data.stackAssignments ?? [],
             creatorSettings: data.creatorSettings ?? [],
